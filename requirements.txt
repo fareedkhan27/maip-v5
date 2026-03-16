@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+anthropic
+pandas
+openpyxl
+python-dotenv
+python-multipart
+slowapi
+jinja2
