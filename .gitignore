@@ -8,3 +8,4 @@ maip.db
 .DS_Store
 node_modules/
 *.log
+MAIP_Console_Prompt_v5.md
