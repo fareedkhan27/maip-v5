@@ -220,10 +220,13 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 .access-gate-card{background:var(--bg-secondary,#1a1d27);border:1px solid var(--border,#2a2d3a);border-radius:12px;padding:40px;width:360px;text-align:center}
 .access-gate-card h2{font-size:1.4rem;font-weight:600;margin-bottom:8px}
 .access-gate-card p{color:var(--text-secondary,#8b8fa8);margin-bottom:24px;font-size:0.9rem}
-.access-gate-input{width:100%;padding:10px 14px;background:var(--bg-primary,#0f1117);border:1px solid var(--border,#2a2d3a);border-radius:8px;color:var(--text-primary,#e2e4f0);font-size:0.95rem;margin-bottom:16px;box-sizing:border-box}
+.access-gate-input{width:100%;padding:10px 14px;background:#1e2130;border:1px solid #3a3f55;border-radius:8px;color:#e2e4f0;-webkit-text-fill-color:#e2e4f0;font-size:0.95rem;margin-bottom:16px;box-sizing:border-box}
+.access-gate-input:focus{outline:none;border-color:#4f6ef7;box-shadow:0 0 0 3px rgba(79,110,247,0.2)}
 .access-gate-btn{width:100%;padding:10px;background:var(--accent,#4f6ef7);color:#fff;border:none;border-radius:8px;font-size:0.95rem;cursor:pointer;font-weight:500}
 .access-gate-btn:disabled{opacity:0.6;cursor:not-allowed}
 .access-gate-error{color:#f87171;font-size:0.85rem;margin-top:12px}
+.access-gate-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1rem;padding:0;line-height:1;opacity:0.6}
+.access-gate-toggle:hover{opacity:1}
 .tc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .tc-track{width:40px;height:4px;background:#1e293b;border-radius:99px;overflow:hidden;flex-shrink:0}
 .tc-fill{height:100%;border-radius:99px;transition:width .5s ease,background .3s ease}
@@ -1455,6 +1458,7 @@ function AccessGate({onUnlocked}){
   const [key,setKey]=React.useState('');
   const [error,setError]=React.useState('');
   const [checking,setChecking]=React.useState(false);
+  const [showKey,setShowKey]=React.useState(false);
   React.useEffect(()=>{
     const stored=sessionStorage.getItem('maip_access_key');
     if(stored)onUnlocked(stored);
@@ -1480,12 +1484,19 @@ function AccessGate({onUnlocked}){
     React.createElement('div',{className:'access-gate-card'},
       React.createElement('h2',null,'MAIP Access'),
       React.createElement('p',null,'Enter your access key to continue.'),
-      React.createElement('input',{
-        type:'password',placeholder:'Access key',value:key,
-        onChange:e=>setKey(e.target.value),
-        onKeyDown:e=>e.key==='Enter'&&handleSubmit(),
-        className:'access-gate-input'
-      }),
+      React.createElement('div',{style:{position:'relative',marginBottom:'16px'}},
+        React.createElement('input',{
+          type:showKey?'text':'password',placeholder:'Enter access key',value:key,
+          onChange:e=>setKey(e.target.value),
+          onKeyDown:e=>e.key==='Enter'&&handleSubmit(),
+          className:'access-gate-input',
+          style:{marginBottom:'0',paddingRight:'44px'}
+        }),
+        React.createElement('button',{
+          type:'button',onClick:()=>setShowKey(v=>!v),
+          className:'access-gate-toggle',tabIndex:-1
+        },showKey?'🙈':'👁')
+      ),
       React.createElement('button',{
         onClick:handleSubmit,disabled:checking,className:'access-gate-btn'
       },checking?'Checking…':'Unlock'),
