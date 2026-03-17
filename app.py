@@ -119,6 +119,16 @@ def init_db():
         ip_address TEXT,
         timestamp TEXT
     )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS feedback_log (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id   INTEGER,
+        query_text   TEXT,
+        issue_type   TEXT,
+        detail       TEXT,
+        ip_address   TEXT,
+        user_agent   TEXT,
+        timestamp    TEXT
+    )""")
     # Migration: add expires_at column to sessions if not present
     try:
         conn.execute("ALTER TABLE sessions ADD COLUMN expires_at TEXT")
@@ -1007,6 +1017,42 @@ async def usage_stats():
     }
 
 
+@app.get("/api/feedback")
+async def get_feedback(limit: int = 50):
+    """
+    Returns recent feedback entries for admin review.
+    Visit /api/feedback to see what users are reporting.
+    """
+    conn  = get_db()
+    rows  = conn.execute(
+        """SELECT id, session_id, query_text, issue_type,
+                  detail, ip_address, timestamp
+           FROM feedback_log
+           ORDER BY id DESC
+           LIMIT ?""",
+        [min(limit, 200)]
+    ).fetchall()
+
+    return {
+        "total":   conn.execute(
+            "SELECT COUNT(*) FROM feedback_log"
+        ).fetchone()[0],
+        "showing": len(rows),
+        "entries": [
+            {
+                "id":         r[0],
+                "session_id": r[1],
+                "query_text": r[2],
+                "issue_type": r[3],
+                "detail":     r[4],
+                "ip_address": r[5],
+                "timestamp":  r[6],
+            }
+            for r in rows
+        ],
+    }
+
+
 @app.get("/api/demo")
 async def demo(request: Request):
     """
@@ -1612,6 +1658,13 @@ class AnnotateRequest(BaseModel):
     author: Optional[str] = "User"
 
 
+class FeedbackRequest(BaseModel):
+    session_id:  Optional[int] = None
+    query_text:  Optional[str] = None
+    issue_type:  str             # "wrong_result"|"chart_broken"|"wrong_count"|"slow"|"suggestion"|"other"
+    detail:      Optional[str] = None
+
+
 @app.post("/api/annotate")
 async def annotate(request: Request, body: AnnotateRequest):
     conn = get_db()
@@ -1682,6 +1735,77 @@ async def get_audit():
     rows = conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 100").fetchall()
     conn.close()
     return {"log": [dict(r) for r in rows]}
+
+
+@app.post("/api/feedback")
+async def submit_feedback(
+    body: FeedbackRequest,
+    request: Request
+):
+    """
+    Accepts structured feedback from users.
+    Stored in feedback_log table and audit_log.
+    """
+    conn      = get_db()
+    timestamp = datetime.utcnow().isoformat()
+    ip        = request.client.host if request.client else "unknown"
+    ua        = request.headers.get("user-agent", "")[:200]
+
+    # Validate issue_type
+    VALID_TYPES = {
+        "wrong_result", "chart_broken", "wrong_count",
+        "slow", "suggestion", "other"
+    }
+    if body.issue_type not in VALID_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid issue_type '{body.issue_type}'. "
+                f"Valid values: {', '.join(sorted(VALID_TYPES))}"
+            )
+        )
+
+    # Insert into feedback_log
+    conn.execute(
+        """INSERT INTO feedback_log
+           (session_id, query_text, issue_type,
+            detail, ip_address, user_agent, timestamp)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        [
+            body.session_id,
+            body.query_text,
+            body.issue_type,
+            body.detail,
+            ip,
+            ua,
+            timestamp,
+        ]
+    )
+
+    # Also write to audit_log for unified log view
+    conn.execute(
+        """INSERT INTO audit_log
+           (action, details, ip_address, timestamp)
+           VALUES (?, ?, ?, ?)""",
+        [
+            "FEEDBACK",
+            json.dumps({
+                "issue_type": body.issue_type,
+                "session_id": body.session_id,
+                "query_text": body.query_text,
+                "detail":     body.detail,
+            }),
+            ip,
+            timestamp,
+        ]
+    )
+
+    conn.commit()
+
+    return {
+        "status":  "received",
+        "message": "Thank you for your feedback.",
+    }
 
 
 if __name__ == "__main__":

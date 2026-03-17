@@ -590,6 +590,83 @@ function SettingsModal({state,dispatch}){
   );
 }
 
+// ─── Feedback Modal ───
+function FeedbackModal({message,onClose}){
+  const [issueType,setIssueType]=React.useState('wrong_result');
+  const [detail,setDetail]=React.useState('');
+  const [status,setStatus]=React.useState('idle');
+  // status: idle | sending | done | error
+  const ISSUE_TYPES=[
+    {value:'wrong_result', label:'Wrong result — filter returned incorrect data'},
+    {value:'chart_broken', label:'Chart broken — visualisation did not render'},
+    {value:'wrong_count',  label:'Wrong count — numbers in response are incorrect'},
+    {value:'slow',         label:'Too slow — response took too long'},
+    {value:'suggestion',   label:'Suggestion — feature request or improvement'},
+    {value:'other',        label:'Other'},
+  ];
+  async function submit(){
+    setStatus('sending');
+    try{
+      const res=await fetch('/api/feedback',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          session_id:message?.sessionId||null,
+          query_text:message?.queryText||null,
+          issue_type:issueType,
+          detail:detail.trim()||null,
+        }),
+      });
+      if(!res.ok)throw new Error(await res.text());
+      setStatus('done');
+      setTimeout(onClose,1800);
+    }catch(e){setStatus('error');}
+  }
+  return React.createElement('div',{
+    onClick:e=>e.target===e.currentTarget&&onClose(),
+    style:{position:'fixed',inset:0,background:'rgba(10,22,40,0.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:60,padding:'20px'},
+  },
+    React.createElement('div',{style:{background:'white',borderRadius:'16px',maxWidth:'480px',width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,.3)',overflow:'hidden'}},
+      React.createElement('div',{style:{background:'linear-gradient(135deg,#0A1628,#0A2463)',padding:'20px 24px',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+        React.createElement('div',null,
+          React.createElement('div',{style:{color:'white',fontWeight:700,fontSize:15}},'🚩 Report an Issue'),
+          React.createElement('div',{style:{color:'#93C5FD',fontSize:12,marginTop:2}},'Help us improve MAIP')
+        ),
+        React.createElement('button',{onClick:onClose,style:{background:'rgba(255,255,255,.15)',border:'none',borderRadius:'8px',color:'white',padding:'6px 12px',cursor:'pointer',fontSize:13}},'✕')
+      ),
+      React.createElement('div',{style:{padding:'24px'}},
+        status==='done'
+          ? React.createElement('div',{style:{textAlign:'center',padding:'24px',color:'#16A34A',fontSize:15,fontWeight:600}},'✅ Feedback received — thank you!')
+          : React.createElement(React.Fragment,null,
+              React.createElement('div',{style:{marginBottom:16}},
+                React.createElement('label',{style:{display:'block',fontSize:12,fontWeight:700,color:'#0A2463',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}},'Issue type'),
+                React.createElement('select',{value:issueType,onChange:e=>setIssueType(e.target.value),style:{width:'100%',border:'1.5px solid #E2E8F0',borderRadius:'8px',padding:'8px 12px',fontSize:13,fontFamily:'inherit',background:'white',cursor:'pointer'}},
+                  ISSUE_TYPES.map(o=>React.createElement('option',{key:o.value,value:o.value},o.label))
+                )
+              ),
+              React.createElement('div',{style:{marginBottom:16}},
+                React.createElement('label',{style:{display:'block',fontSize:12,fontWeight:700,color:'#0A2463',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}},'Details (optional)'),
+                React.createElement('textarea',{rows:3,value:detail,onChange:e=>setDetail(e.target.value),placeholder:'Describe what happened, what you expected, or your suggestion...',style:{width:'100%',border:'1.5px solid #E2E8F0',borderRadius:'8px',padding:'8px 12px',fontSize:13,fontFamily:'inherit',resize:'vertical',minHeight:'72px',outline:'none'}})
+              ),
+              message&&message.queryText&&React.createElement('div',{style:{background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:'8px',padding:'10px 12px',marginBottom:16}},
+                React.createElement('div',{style:{fontSize:11,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}},'Related query'),
+                React.createElement('div',{style:{fontSize:12,color:'#374151',fontFamily:'IBM Plex Mono, Courier New, monospace'}},
+                  message.queryText.length>80?message.queryText.slice(0,80)+'…':message.queryText
+                )
+              ),
+              status==='error'&&React.createElement('div',{style:{color:'#DC2626',fontSize:12,marginBottom:12}},'⚠️ Could not send feedback. Please try again.'),
+              React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}},
+                React.createElement('button',{onClick:onClose,style:{border:'1px solid #E2E8F0',background:'white',borderRadius:'8px',padding:'9px 20px',cursor:'pointer',fontSize:12,color:'#374151'}},'Cancel'),
+                React.createElement('button',{onClick:submit,disabled:status==='sending',style:{background:status==='sending'?'#94A3B8':'#0A2463',color:'white',border:'none',borderRadius:'8px',padding:'9px 22px',cursor:status==='sending'?'not-allowed':'pointer',fontSize:12,fontWeight:700}},
+                  status==='sending'?'Sending…':'🚩 Send Report'
+                )
+              )
+            )
+      )
+    )
+  );
+}
+
 // ─── Sidebar ───
 function Sidebar({state,dispatch}){
   const modules=[
@@ -738,7 +815,7 @@ function DataTable({rows,schema,page,onPageChange}){
 }
 
 // ─── Query Module ───
-function QueryModule({state,dispatch}){
+function QueryModule({state,dispatch,onFeedback}){
   const [input,setInput]=useState('');
   const chatRef=useRef();
   const inputRef=useRef();
@@ -840,7 +917,14 @@ function QueryModule({state,dispatch}){
                   const m=s.match(/Did you mean '([^']+)'/);
                   if(m)submitQuery(state.messages.filter(m2=>m2.role==='user').pop()?.text?.replace(/\S+/,m[1])||m[1]);
                 }},s))
-              )
+              ),
+              onFeedback&&React.createElement('button',{
+                onClick:()=>onFeedback({sessionId:state.sessionId,queryText:msg.query||null}),
+                title:'Report an issue with this response',
+                style:{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#94A3B8',padding:'2px 6px',borderRadius:'4px',marginTop:'4px',display:'inline-flex',alignItems:'center',gap:'3px',transition:'color 0.15s'},
+                onMouseEnter:e=>e.currentTarget.style.color='#DC2626',
+                onMouseLeave:e=>e.currentTarget.style.color='#94A3B8',
+              },'🚩 Report')
             )
           );
         }),
@@ -1080,6 +1164,8 @@ function App(){
   if(savedM2)init.m2Model=savedM2;
 
   const [state,dispatch]=useReducer(reducer,init);
+  const [feedbackOpen,setFeedbackOpen]=React.useState(false);
+  const [feedbackMessage,setFeedbackMessage]=React.useState(null);
 
   useEffect(()=>{
     const handler=e=>{
@@ -1096,7 +1182,7 @@ function App(){
     if(!state.sessionId)return React.createElement(OnboardingScreen,{dispatch});
     switch(state.activeModule){
       case 'dashboard':return React.createElement(DashboardModule,{state,dispatch});
-      case 'query':return React.createElement(QueryModule,{state,dispatch});
+      case 'query':return React.createElement(QueryModule,{state,dispatch,onFeedback:(m)=>{setFeedbackMessage(m);setFeedbackOpen(true);}});
       case 'intelligence':return React.createElement(IntelligenceModule,{state,dispatch});
       case 'export':return React.createElement(ExportModule,{state});
       default:return React.createElement(DashboardModule,{state,dispatch});
@@ -1110,7 +1196,8 @@ function App(){
       React.createElement('div',{className:'content'},renderModule())
     ),
     state.showUpload&&React.createElement(UploadModal,{state,dispatch}),
-    state.showSettings&&React.createElement(SettingsModal,{state,dispatch})
+    state.showSettings&&React.createElement(SettingsModal,{state,dispatch}),
+    feedbackOpen&&React.createElement(FeedbackModal,{message:feedbackMessage,onClose:()=>{setFeedbackOpen(false);setFeedbackMessage(null);}})
   );
 }
 
