@@ -611,7 +611,13 @@ def build_chart_data(df: pd.DataFrame, viz_spec: dict, schema: dict, profile: di
     if not title:
         title = f"Distribution by {col} ({len(df):,} records)"
 
-    return {"type": chart_type, "x_field": col, "title": title, "data": data}
+    # Surface the semantic dimension so the client can select chart type without AI
+    dimension = "product"
+    for role, rcol in schema.get("roles", {}).items():
+        if rcol == col:
+            dimension = role.lower()
+            break
+    return {"type": chart_type, "x_field": col, "title": title, "data": data, "dimension": dimension}
 
 
 # ─────────────────────────────────────────────

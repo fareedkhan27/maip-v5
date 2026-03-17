@@ -222,6 +222,7 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script type="text/babel">
 const {useState,useEffect,useReducer,useRef,useCallback,useMemo}=React;
 
@@ -269,6 +270,174 @@ function generateExamples(profile,schema){
   if(pv.length>1&&cv.length>0)ex.push(`${pv[1]} in ${cv[0]}`);
   ex.push('Line chart over time');
   return ex.slice(0,8);
+}
+
+// ─── Chart.js Utilities ───
+function selectChartType(chartData) {
+  /*
+    Determines chart type from data shape.
+    Zero AI tokens consumed. Runs client-side only.
+    Rules (in priority order):
+    1. Time-series (Period dimension present, single metric) → line (untouched)
+    2. Multiple groups + single period + status breakdown → stacked bar
+    3. Multiple products OR countries, single period      → clustered bar
+    4. Single group comparison (≤2 values)               → horizontal bar
+    5. Fallback                                           → clustered bar
+  */
+  if (!chartData || !chartData.labels || chartData.labels.length === 0) {
+    return 'clustered_bar';
+  }
+  const hasPeriod = chartData.dimension === 'period' ||
+                    (chartData.labels[0] && /^\d{4}-Q\d$/.test(chartData.labels[0]));
+  if (hasPeriod) return 'line'; // preserve existing line logic
+  const hasStatusBreakdown = chartData.datasets && chartData.datasets.length > 1;
+  const labelCount = chartData.labels.length;
+  if (hasStatusBreakdown) return 'stacked_bar';
+  if (labelCount <= 2)     return 'horizontal_bar';
+  return 'clustered_bar';
+}
+
+// Store chart instance to allow clean destroy-on-redraw
+let _maipChartInstance = null;
+function renderBarChart(canvasId, chartData) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  // Destroy existing instance — prevents Chart.js ghost overlay
+  if (_maipChartInstance) {
+    _maipChartInstance.destroy();
+    _maipChartInstance = null;
+  }
+  const chartType = selectChartType(chartData);
+  const isHorizontal = chartType === 'horizontal_bar';
+  const isStacked    = chartType === 'stacked_bar';
+  // Color palette — accessible, professional, dark-bg optimized
+  const PALETTE = [
+    '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6',
+    '#ef4444', '#06b6d4', '#f97316', '#84cc16'
+  ];
+  // Build Chart.js datasets
+  const datasets = (chartData.datasets || [
+    { label: chartData.label || 'Count', data: chartData.values || [] }
+  ]).map((ds, i) => ({
+    label: ds.label || '',
+    data: ds.data || ds.values || [],
+    backgroundColor: PALETTE[i % PALETTE.length] + (isStacked ? 'cc' : 'dd'),
+    borderColor:     PALETTE[i % PALETTE.length],
+    borderWidth: 1,
+    borderRadius: isHorizontal ? 3 : 4,
+    borderSkipped: false
+  }));
+  const config = {
+    type: 'bar',
+    data: { labels: chartData.labels || [], datasets: datasets },
+    options: {
+      indexAxis: isHorizontal ? 'y' : 'x',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: datasets.length > 1,
+          position: 'top',
+          labels: { color: '#475569', font: { size: 12 }, boxWidth: 12, padding: 16 }
+        },
+        tooltip: {
+          backgroundColor: '#1e293b', titleColor: '#f1f5f9',
+          bodyColor: '#cbd5e1', borderColor: '#334155',
+          borderWidth: 1, padding: 10,
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed[isHorizontal ? 'x' : 'y']}` }
+        }
+      },
+      scales: {
+        x: { stacked: isStacked, grid: { color: '#E2E8F0' }, ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 35 } },
+        y: { stacked: isStacked, grid: { color: '#E2E8F0' }, ticks: { color: '#64748b', font: { size: 11 } }, beginAtZero: true }
+      },
+      animation: { duration: 400 }
+    }
+  };
+  _maipChartInstance = new Chart(canvas, config);
+}
+
+// ─── React wrapper for Chart.js bar charts ───
+function ChartJSBar({data, title, xField, chartData}) {
+  const canvasRef = useRef(null);
+  const instanceRef = useRef(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || typeof Chart === 'undefined') return;
+
+    // Transform to Chart.js format
+    let labels, values, dimensionKey, labelText;
+    if (chartData) {
+      labels      = (chartData.data||[]).map(d=>d.name);
+      values      = (chartData.data||[]).map(d=>d.value);
+      dimensionKey= chartData.dimension || (chartData.x_field||'').toLowerCase() || 'product';
+      labelText   = chartData.title || 'Count';
+    } else if (data) {
+      labels      = data.map(d=>d.name);
+      values      = data.map(d=>d.value);
+      dimensionKey= xField ? xField.toLowerCase() : 'product';
+      labelText   = title || 'Count';
+    } else { return; }
+
+    const cd = {
+      labels,
+      datasets: [{ label: labelText, data: values }],
+      dimension: dimensionKey
+    };
+
+    const chartType  = selectChartType(cd);
+    const isHorizontal = chartType === 'horizontal_bar';
+    const isStacked    = chartType === 'stacked_bar';
+    const PALETTE = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#84cc16'];
+
+    const datasets = cd.datasets.map((ds, i) => ({
+      label: ds.label || '',
+      data: ds.data || [],
+      backgroundColor: PALETTE[i % PALETTE.length] + (isStacked ? 'cc' : 'dd'),
+      borderColor: PALETTE[i % PALETTE.length],
+      borderWidth: 1,
+      borderRadius: isHorizontal ? 3 : 4,
+      borderSkipped: false
+    }));
+
+    if (instanceRef.current) { instanceRef.current.destroy(); instanceRef.current = null; }
+
+    instanceRef.current = new Chart(canvasRef.current, {
+      type: 'bar',
+      data: { labels: cd.labels, datasets },
+      options: {
+        indexAxis: isHorizontal ? 'y' : 'x',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: datasets.length > 1, position: 'top', labels: { color: '#475569', font: { size: 12 }, boxWidth: 12, padding: 16 } },
+          tooltip: {
+            backgroundColor: '#1e293b', titleColor: '#f1f5f9', bodyColor: '#cbd5e1',
+            borderColor: '#334155', borderWidth: 1, padding: 10,
+            callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed[isHorizontal?'x':'y']}` }
+          }
+        },
+        scales: {
+          x: { stacked: isStacked, grid: { color: '#E2E8F0' }, ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 35 } },
+          y: { stacked: isStacked, grid: { color: '#E2E8F0' }, ticks: { color: '#64748b', font: { size: 11 } }, beginAtZero: true }
+        },
+        animation: { duration: 400 }
+      }
+    });
+
+    return () => { if (instanceRef.current) { instanceRef.current.destroy(); instanceRef.current = null; } };
+  }, [data, chartData, title, xField]);
+
+  const isEmpty = chartData ? (!chartData.data || chartData.data.length === 0) : (!data || data.length === 0);
+  if (isEmpty) return React.createElement('div',{style:{padding:16,color:'var(--text-muted)',fontSize:13}},'No chart data');
+  const total = (chartData ? chartData.data : data||[]).reduce((a,b)=>a+(b.value||0),0);
+
+  return React.createElement('div',{className:'chart-container'},
+    React.createElement('div',{style:{height:'280px',position:'relative'}},
+      React.createElement('canvas',{ref:canvasRef})
+    ),
+    React.createElement('div',{className:'chart-caption'},`${total.toLocaleString()} records`)
+  );
 }
 
 // ─── SVG Charts ───
@@ -932,7 +1101,7 @@ function QueryModule({state,dispatch,onFeedback}){
     if(!cd)return React.createElement('div',{style:{padding:24,textAlign:'center',color:'var(--text-muted)'}},'No chart requested. Ask for a "bar chart", "pie chart", or "line chart".');
     if(cd.type==='pie')return React.createElement(PieChart,{data:cd.data,title:cd.title,xField:cd.x_field});
     if(cd.type==='line')return React.createElement(LineChart,{data:cd.data,title:cd.title,xField:cd.x_field});
-    return React.createElement(BarChart,{data:cd.data,title:cd.title,xField:cd.x_field});
+    return React.createElement(ChartJSBar,{chartData:cd});
   };
 
   const renderFilterSummary=()=>{
@@ -1100,7 +1269,7 @@ function DashboardModule({state,dispatch}){
         ),
         React.createElement('div',{className:'panel-card'},
           React.createElement('h3',null,'Distribution by Region'),
-          regionData.length>0?React.createElement(BarChart,{data:regionData,title:'Records by Region',xField:'Region'}):React.createElement('p',{style:{color:'var(--text-muted)'}},'No region data')
+          regionData.length>0?React.createElement(ChartJSBar,{data:regionData,title:'Records by Region',xField:'Region'}):React.createElement('p',{style:{color:'var(--text-muted)'}},'No region data')
         )
       )
     )
