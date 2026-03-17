@@ -897,6 +897,88 @@ Structure your response with these sections:
 
 
 # ─────────────────────────────────────────────
+# RETRY UTILITY
+# ─────────────────────────────────────────────
+
+RETRYABLE_STATUS_CODES = {429, 529}
+MAX_RETRIES = 3
+BASE_DELAY_SECONDS = 2  # exponential: 2, 4, 8
+
+
+def call_anthropic_with_retry(fn, *args, **kwargs):
+    """
+    Wraps any Anthropic API call with exponential backoff retry.
+    Retries on 529 (overloaded) and 429 (rate limit) only.
+    Raises on all other errors immediately.
+    """
+    last_exception = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            return fn(*args, **kwargs)
+        except anthropic.APIStatusError as e:
+            if e.status_code in RETRYABLE_STATUS_CODES:
+                last_exception = e
+                wait = BASE_DELAY_SECONDS * (2 ** attempt)
+                time.sleep(wait)
+            else:
+                raise  # non-retryable: surface immediately
+        except anthropic.APIConnectionError as e:
+            last_exception = e
+            wait = BASE_DELAY_SECONDS * (2 ** attempt)
+            time.sleep(wait)
+    raise last_exception  # all retries exhausted
+
+
+def map_api_error_to_user_message(e: Exception) -> dict:
+    """
+    Returns a structured error dict safe for frontend display.
+    Never exposes raw API error strings or request IDs to the user.
+    The 'error' key mirrors 'user_message' so the api() JS helper
+    can surface it via e.detail||e.error.
+    """
+    if isinstance(e, anthropic.APIStatusError):
+        if e.status_code == 529:
+            msg = {
+                "error_code": "SERVICE_BUSY",
+                "user_message": "Our AI service is experiencing high demand. Please try again in 30 seconds.",
+                "retry_suggested": True,
+            }
+        elif e.status_code == 429:
+            msg = {
+                "error_code": "RATE_LIMITED",
+                "user_message": "Request limit reached. Please wait a moment before running another research query.",
+                "retry_suggested": True,
+            }
+        elif e.status_code in (401, 403):
+            msg = {
+                "error_code": "AUTH_ERROR",
+                "user_message": "A configuration issue was detected. Please contact support.",
+                "retry_suggested": False,
+            }
+        else:
+            msg = {
+                "error_code": "AI_ERROR",
+                "user_message": "The AI research service returned an unexpected error. Please try again.",
+                "retry_suggested": True,
+            }
+    elif isinstance(e, anthropic.APIConnectionError):
+        msg = {
+            "error_code": "CONNECTION_ERROR",
+            "user_message": "Could not reach the AI service. Check your connection and try again.",
+            "retry_suggested": True,
+        }
+    else:
+        msg = {
+            "error_code": "UNKNOWN_ERROR",
+            "user_message": "An unexpected error occurred. Please try again or contact support.",
+            "retry_suggested": False,
+        }
+    # Mirror user_message → error so api() JS helper reads it via e.error
+    msg["error"] = msg["user_message"]
+    return msg
+
+
+# ─────────────────────────────────────────────
 # MULTI-TURN TOOL USE HANDLER
 # ─────────────────────────────────────────────
 
@@ -910,7 +992,8 @@ def call_with_tools(system: str, user_msg: str, model: str = SONNET, max_turns: 
 
     for turn in range(max_turns):
         try:
-            response = client.messages.create(
+            response = call_anthropic_with_retry(
+                client.messages.create,
                 model=model,
                 max_tokens=2000,
                 system=system,
@@ -918,7 +1001,7 @@ def call_with_tools(system: str, user_msg: str, model: str = SONNET, max_turns: 
                 tools=tools,
             )
         except Exception as e:
-            return f"AI research error: {str(e)}"
+            raise  # propagate to route handler after retries exhausted
 
         if response.stop_reason == "end_turn":
             return "\n".join(b.text for b in response.content if hasattr(b, "text") and b.type == "text")
@@ -1473,7 +1556,14 @@ async def research(request: Request, body: ResearchRequest):
 
     model_to_use = body.model if body.model else SONNET
     _check_budget(5000)  # research calls consume more tokens
-    result_text = call_with_tools(system_prompt, user_msg, model=model_to_use)
+    try:
+        result_text = call_with_tools(system_prompt, user_msg, model=model_to_use)
+    except Exception as e:
+        error_payload = map_api_error_to_user_message(e)
+        return JSONResponse(
+            status_code=503 if error_payload.get("retry_suggested") else 500,
+            content=error_payload,
+        )
 
     confidence_label = "Medium"
     if "[Verified]" in result_text:
