@@ -215,6 +215,7 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 .research-error-banner .retry-btn{margin-left:auto;background:#3b82f6;color:white;border:none;border-radius:4px;padding:6px 14px;font-size:13px;cursor:pointer;white-space:nowrap}
 .research-error-banner .retry-btn:hover{background:#2563eb}
 .token-chip{display:inline-flex;align-items:center;gap:6px;background:#0f172a;border:1px solid #1e293b;border-radius:99px;padding:4px 10px 4px 8px;font-size:11px;color:#cbd5e1;white-space:nowrap;cursor:default;user-select:none}
+.token-chip--loading{opacity:0.5;pointer-events:none}
 .tc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .tc-track{width:40px;height:4px;background:#1e293b;border-radius:99px;overflow:hidden;flex-shrink:0}
 .tc-fill{height:100%;border-radius:99px;transition:width .5s ease,background .3s ease}
@@ -898,7 +899,10 @@ function AboutModal({onClose}){
 
 // ─── Token Chip ───
 function TokenChip({stats}){
-  if(!stats)return null;
+  if(!stats)return React.createElement('div',{className:'token-chip token-chip--loading'},
+    React.createElement('span',{className:'tc-dot',style:{background:'#334155'}}),
+    React.createElement('span',{style:{fontSize:'11px',color:'#64748b'}},'Loading usage…')
+  );
   const pct    = stats.pct_used??0;
   const status = stats.status??'healthy';
   const used   = stats.tokens_used_today??0;
@@ -1462,7 +1466,7 @@ function App(){
     fetchStats();
     const interval=setInterval(fetchStats,60000);
     return()=>clearInterval(interval);
-  },[fetchStats]);
+  },[]);
 
   useEffect(()=>{
     const handler=e=>{
