@@ -1,6 +1,6 @@
 # MAIP — Market Access Intelligence Platform
 
-> **AI-powered reimbursement intelligence for pharmaceutical market access teams.**
+> **AI-powered reimbursement intelligence for market access professionals.**
 > Upload any structured dataset. Ask questions in plain English. Get decision-ready answers.
 
 [![Python](https://img.shields.io/badge/Python-3.11+-0A2463?style=flat-square&logo=python&logoColor=white)](https://python.org)
@@ -18,7 +18,7 @@ Ask things like:
 
 - *"Show Opdivo Planned entries in MEA"*
 - *"Bar chart: reimbursed entries by region"*
-- *"How many countries have Reblozyl planned status?"*
+- *"How many countries have Planned status?"*
 - *"What is the typical HTA timeline for Saudi Arabia?"*
 - *"Which product has the most planned records?"*
 
@@ -189,20 +189,18 @@ Interactive API docs available at `http://localhost:8000/docs` (FastAPI auto-gen
 4. Add environment variables in the Variables tab
 5. Railway generates a public URL automatically
 
-### Azure App Service (Enterprise / BMS)
+### Azure App Service
 
 ```bash
 az group create --name maip-rg --location uaenorth
 az webapp create --resource-group maip-rg \
-  --plan maip-plan --name maip-bms \
+  --plan maip-plan --name maip-app \
   --runtime "PYTHON:3.11"
 az webapp config appsettings set \
-  --resource-group maip-rg --name maip-bms \
+  --resource-group maip-rg --name maip-app \
   --settings ANTHROPIC_API_KEY="sk-ant-..."
 git push azure main
 ```
-
-Add Azure AD authentication to gate access to Microsoft account holders.
 
 ---
 
@@ -251,12 +249,12 @@ The entire application runs from two files: `app.py` and `templates/index.html`.
 
 ## Contributing
 
-This project is built and maintained by the BMS LR Market Access team.
-
 To suggest improvements or report issues:
+
 1. Open an issue on GitHub describing the problem or suggestion
 2. For bugs: include the exact query you typed and the unexpected result
 3. For features: describe the market access scenario you are trying to solve
+4. Contact: [fareedkhan27@gmail.com](mailto:fareedkhan27@gmail.com)
 
 ---
 
@@ -272,11 +270,17 @@ To suggest improvements or report issues:
 
 ---
 
+## Author
+
+**Fareed Khan**
+[fareedkhan27@gmail.com](mailto:fareedkhan27@gmail.com) · [lrmaip.com](https://lrmaip.com)
+
+---
+
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-*MAIP v5.0 — Market Access Intelligence Platform*
-*Bristol Myers Squibb · LR Markets · Built with Claude*
+*MAIP v5.0 — Market Access Intelligence Platform · Built with Claude*
