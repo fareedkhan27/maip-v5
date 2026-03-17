@@ -628,14 +628,75 @@ function Header({state,dispatch}){
 
 // ─── Onboarding ───
 function OnboardingScreen({dispatch}){
+  const [demoLoading,setDemoLoading]=useState(false);
+  const [demoError,setDemoError]=useState('');
+
+  const loadDemo=async()=>{
+    setDemoLoading(true);setDemoError('');
+    try{
+      const res=await api('/api/demo');
+      dispatch({type:'SET',payload:{
+        sessionId:res.session_id,filename:'Demo Dataset',rowCount:res.row_count,
+        schema:res.schema,profile:res.profile,
+        activeModule:'dashboard',messages:[],results:null,chart:null,stats:null,page:1
+      }});
+    }catch(e){setDemoError(e.message);}
+    setDemoLoading(false);
+  };
+
   return React.createElement('div',{className:'onboarding'},
     React.createElement('h1',null,'Market Access Intelligence Platform'),
     React.createElement('p',null,'Upload your reimbursement dataset to unlock AI-powered market access analytics, competitive intelligence, and strategic insights.'),
+    /* Addition A — platform description */
+    React.createElement('p',{style:{fontSize:13,color:'var(--text-secondary)',maxWidth:500,marginBottom:'var(--sp-4)',lineHeight:1.6}},
+      'MAIP is an AI-powered market access intelligence platform. Upload your dataset and ask questions in plain English — no SQL, no filter menus, no pivot tables.'
+    ),
+    /* upload zone — unchanged */
     React.createElement('div',{className:'upload-zone',onClick:()=>dispatch({type:'SET',payload:{showUpload:true,uploadStep:1}})},
       React.createElement('div',{className:'upload-icon'},'🚀'),
       React.createElement('p',{style:{fontWeight:600,fontSize:16}},'Load Your Dataset'),
       React.createElement('p',{style:{fontSize:13,color:'var(--text-muted)'}},'Drag & drop or click — .xlsx, .xls, .csv')
-    )
+    ),
+    /* Addition C — Try Demo button */
+    React.createElement('button',{
+      className:'btn btn-secondary',
+      style:{marginTop:'var(--sp-3)'},
+      onClick:loadDemo,
+      disabled:demoLoading
+    },demoLoading?'Loading demo…':'Try with demo data →'),
+    demoError&&React.createElement('p',{style:{color:'var(--c-red-500)',fontSize:12,marginTop:4}},demoError),
+    /* Addition B — upload instructions panel */
+    React.createElement('div',{style:{
+      marginTop:'var(--sp-6)',maxWidth:480,width:'100%',
+      background:'var(--bg-input)',border:'1px solid var(--border)',
+      borderRadius:'var(--r-lg)',padding:'var(--sp-4) var(--sp-5)',
+      textAlign:'left',fontSize:13
+    }},
+      React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}},
+        React.createElement('div',null,
+          React.createElement('p',{style:{fontWeight:600,marginBottom:4,color:'var(--text-primary)'}},'What MAIP accepts:'),
+          React.createElement('ul',{style:{listStyle:'none',padding:0,color:'var(--text-secondary)',lineHeight:1.8}},
+            React.createElement('li',null,'• .xlsx, .xls, or .csv files (max 20 MB)'),
+            React.createElement('li',null,'• Any structured dataset — columns auto-detected'),
+            React.createElement('li',null,'• No specific template required')
+          )
+        ),
+        React.createElement('div',null,
+          React.createElement('p',{style:{fontWeight:600,marginBottom:4,color:'var(--text-primary)'}},'Your data is private:'),
+          React.createElement('ul',{style:{listStyle:'none',padding:0,color:'var(--text-secondary)',lineHeight:1.8}},
+            React.createElement('li',null,'• Files stay in your session only'),
+            React.createElement('li',null,'• Sessions expire after 4 hours'),
+            React.createElement('li',null,'• Nothing is stored permanently'),
+            React.createElement('li',null,'• No data is ever shared between users')
+          )
+        )
+      )
+    ),
+    /* Addition D — privacy link */
+    React.createElement('a',{
+      href:'/privacy',target:'_blank',
+      style:{fontSize:'11px',color:'var(--text-muted)',marginTop:'var(--sp-4)',display:'block'}
+    },'Privacy & Data Notice')
   );
 }
 

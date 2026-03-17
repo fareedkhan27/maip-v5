@@ -181,7 +181,12 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "https://lrmaip.com",
+        "https://www.lrmaip.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -954,6 +959,11 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_page(request: Request):
+    return templates.TemplateResponse("privacy.html", {"request": request})
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY")), "db_path": DB_PATH}
@@ -1116,6 +1126,7 @@ async def demo(request: Request):
 
 
 @app.post("/api/upload")
+@limiter.limit("10/hour")
 async def upload(request: Request, file: UploadFile = File(...)):
     # ── Guard 1: File extension ─────────────────────────────────────────
     _ext = os.path.splitext(file.filename or "")[1].lower()
@@ -1213,7 +1224,7 @@ class QueryRequest(BaseModel):
 
 
 @app.post("/api/query")
-@limiter.limit("60/hour")
+@limiter.limit("30/hour")
 async def query(request: Request, body: QueryRequest):
     start = time.time()
     try:
@@ -1382,7 +1393,7 @@ class ResearchRequest(BaseModel):
 
 
 @app.post("/api/research")
-@limiter.limit("10/hour")
+@limiter.limit("5/hour")
 async def research(request: Request, body: ResearchRequest):
     start = time.time()
 

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy &amp; Data Notice — MAIP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'IBM Plex Sans', -apple-system, Helvetica, sans-serif;
+    background: #F0F4F8;
+    color: #0F172A;
+    line-height: 1.7;
+    padding: 40px 20px;
+  }
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    overflow: hidden;
+  }
+  .header {
+    background: linear-gradient(135deg, #0A1628 0%, #0A2463 60%, #1E6091 100%);
+    padding: 40px 48px;
+    color: white;
+  }
+  .header .logo {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #93C5FD;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+  .header p {
+    color: #93C5FD;
+    font-size: 14px;
+  }
+  .body { padding: 48px; }
+  .badge {
+    display: inline-block;
+    background: #ECFDF5;
+    color: #065F46;
+    border: 1px solid #A7F3D0;
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 32px;
+  }
+  h2 {
+    font-size: 17px;
+    font-weight: 700;
+    color: #0A2463;
+    margin: 32px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #E2E8F0;
+  }
+  h2:first-of-type { margin-top: 0; }
+  p { font-size: 14px; color: #374151; margin-bottom: 12px; }
+  ul { padding-left: 20px; margin-bottom: 12px; }
+  li { font-size: 14px; color: #374151; margin-bottom: 6px; }
+  .highlight {
+    background: #EFF6FF;
+    border-left: 4px solid #0A2463;
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 14px;
+    color: #1E3A5F;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0A2463;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .card p { margin: 0; font-size: 13px; color: #475569; }
+  .contact {
+    background: #F0F4F8;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-top: 32px;
+  }
+  .contact a { color: #0A2463; font-weight: 600; }
+  .footer {
+    border-top: 1px solid #E2E8F0;
+    padding: 20px 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #F8FAFC;
+  }
+  .footer span { font-size: 12px; color: #94A3B8; }
+  .footer a {
+    font-size: 12px;
+    color: #0A2463;
+    text-decoration: none;
+    font-weight: 600;
+  }
+  @media (max-width: 600px) {
+    .body { padding: 24px; }
+    .header { padding: 28px 24px; }
+    .grid { grid-template-columns: 1fr; }
+    .footer { flex-direction: column; gap: 8px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="logo">MAIP · lrmaip.com</div>
+    <h1>Privacy &amp; Data Notice</h1>
+    <p>How MAIP handles your uploaded files and session data</p>
+  </div>
+
+  <div class="body">
+
+    <div class="badge">✓ No account required · No permanent storage · No data sharing</div>
+
+    <h2>What MAIP collects</h2>
+    <p>When you use MAIP, the following information is processed:</p>
+    <ul>
+      <li><strong>Uploaded file</strong> — the .xlsx, .xls, or .csv file you choose to upload</li>
+      <li><strong>Session ID</strong> — a randomly generated identifier that links your queries to your uploaded data</li>
+      <li><strong>Query text</strong> — the natural language questions you type into the chat interface</li>
+      <li><strong>IP address</strong> — recorded in the audit log for rate limiting and abuse prevention</li>
+    </ul>
+
+    <div class="highlight">
+      Your uploaded file is never shared with other users. Each session is fully isolated.
+      Two people using MAIP at the same time cannot see each other's data.
+    </div>
+
+    <h2>How long data is stored</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">Uploaded file</div>
+        <p>Held in your session for up to <strong>4 hours</strong>, then automatically deleted.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Query history</div>
+        <p>Stored in the session log for <strong>4 hours</strong>, then deleted with the session.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Research results</div>
+        <p>Cached for performance during your session. Deleted when the session expires.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">IP address</div>
+        <p>Retained in the audit log for <strong>30 days</strong> for rate limiting purposes only.</p>
+      </div>
+    </div>
+
+    <h2>How to delete your data immediately</h2>
+    <p>Close the browser tab. Your session expires and all associated data is
+    scheduled for deletion. There is no account to log out of and no data to
+    manually request deletion of — the session lifecycle handles it automatically.</p>
+
+    <h2>Third-party processing — Anthropic API</h2>
+    <p>MAIP uses the Anthropic Claude API to process your natural language queries.
+    When you type a question, the following is sent to Anthropic:</p>
+    <ul>
+      <li>Your query text (after abbreviation expansion)</li>
+      <li>Pre-computed statistics about your filtered data (counts, breakdowns — never raw rows)</li>
+    </ul>
+    <p><strong>Raw data rows from your uploaded file are never sent to Anthropic.</strong>
+    The AI only receives aggregate statistics that have already been computed by the server.</p>
+    <p>Anthropic's data handling is governed by their
+    <a href="https://www.anthropic.com/privacy" target="_blank">Privacy Policy</a>.
+    MAIP uses the API under Anthropic's standard commercial terms.</p>
+
+    <h2>Market intelligence research</h2>
+    <p>When you use modules such as Competitive Landscape or HTA Profiles,
+    MAIP sends a research query to the Anthropic API with web search enabled.
+    These queries contain only the product name, country, and therapy area
+    you selected — never any data from your uploaded file.</p>
+
+    <h2>What MAIP does not do</h2>
+    <ul>
+      <li>Does not store your uploaded file permanently</li>
+      <li>Does not share your data with other users or third parties (except Anthropic API as described above)</li>
+      <li>Does not require account creation or login</li>
+      <li>Does not use cookies for tracking</li>
+      <li>Does not send your raw data rows to any AI model</li>
+      <li>Does not retain data after your session expires</li>
+    </ul>
+
+    <h2>Security</h2>
+    <p>MAIP is served over HTTPS. The Anthropic API key is stored server-side only
+    and is never exposed to the browser. File uploads are validated for type and
+    size before processing. Rate limiting is applied per IP address to prevent abuse.</p>
+
+    <h2>Children</h2>
+    <p>MAIP is a professional tool intended for use by adults in pharmaceutical
+    market access roles. It is not directed at children under 13.</p>
+
+    <div class="contact">
+      <strong>Questions about this notice?</strong><br>
+      <p style="margin-top:6px;">
+        Contact the MAIP team at
+        <a href="mailto:privacy@lrmaip.com">privacy@lrmaip.com</a>
+        or visit
+        <a href="https://lrmaip.com" target="_blank">lrmaip.com</a>.
+      </p>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <span>Last updated: March 2026 · MAIP v5.0</span>
+    <a href="/">← Back to MAIP</a>
+  </div>
+
+</div>
+</body>
+</html>
