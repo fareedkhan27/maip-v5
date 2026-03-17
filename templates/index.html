@@ -667,8 +667,57 @@ function FeedbackModal({message,onClose}){
   );
 }
 
+// ─── About Modal ───
+function AboutModal({onClose}){
+  return React.createElement('div',{
+    onClick:e=>e.target===e.currentTarget&&onClose(),
+    style:{position:'fixed',inset:0,background:'rgba(10,22,40,0.65)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:60,padding:'20px'},
+  },
+    React.createElement('div',{style:{background:'white',borderRadius:'16px',maxWidth:'420px',width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,.25)',overflow:'hidden'}},
+      React.createElement('div',{style:{background:'linear-gradient(135deg,#0A1628,#0A2463)',padding:'28px 28px 20px'}},
+        React.createElement('div',{style:{fontSize:'28px',fontWeight:800,color:'white',fontFamily:'inherit',letterSpacing:'-0.02em',marginBottom:'4px'}},'MAIP'),
+        React.createElement('div',{style:{fontSize:'13px',color:'#93C5FD',fontFamily:'inherit'}},'Market Access Intelligence Platform')
+      ),
+      React.createElement('div',{style:{padding:'24px 28px'}},
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:'12px',padding:'14px 16px',background:'#F0F4FB',borderRadius:'10px',marginBottom:'20px',border:'1px solid #E3EAF4'}},
+          React.createElement('div',{style:{width:'40px',height:'40px',background:'linear-gradient(135deg,#0A2463,#1E6091)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0}},'👤'),
+          React.createElement('div',null,
+            React.createElement('div',{style:{fontSize:'14px',fontWeight:700,color:'#0A2463',fontFamily:'inherit'}},'Fareed Khan'),
+            React.createElement('div',{style:{fontSize:'12px',color:'#64748B',fontFamily:'inherit'}},
+              React.createElement('a',{href:'mailto:fareedkhan27@gmail.com',style:{color:'#1E6091',textDecoration:'none'}},'fareedkhan27@gmail.com')
+            )
+          )
+        ),
+        React.createElement('div',{style:{marginBottom:'20px'}},
+          [
+            ['Version','MAIP v5.0'],
+            ['Platform','lrmaip.com'],
+            ['AI Engine','Claude (Anthropic)'],
+            ['Coverage','37 markets · Schema-adaptive'],
+            ['Data','Session-only · Deleted after 4hrs'],
+          ].map(([label,val])=>React.createElement('div',{key:label,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid #F1F5F9'}},
+            React.createElement('span',{style:{fontSize:'12px',color:'#64748B',fontFamily:'inherit'}},label),
+            React.createElement('span',{style:{fontSize:'12px',fontWeight:600,color:'#0F172A',fontFamily:'inherit'}},val)
+          ))
+        ),
+        React.createElement('div',{style:{display:'flex',gap:'8px',justifyContent:'center',flexWrap:'wrap'}},
+          [
+            ['🌐 lrmaip.com','https://lrmaip.com'],
+            ['🔒 Privacy','/privacy'],
+            ['✉️ Contact','mailto:fareedkhan27@gmail.com'],
+          ].map(([label,href])=>React.createElement('a',{key:label,href,target:href.startsWith('http')?'_blank':'_self',style:{fontSize:'11px',color:'#1E6091',textDecoration:'none',padding:'6px 12px',background:'#EFF6FF',borderRadius:'20px',border:'1px solid #BFDBFE',fontWeight:600,fontFamily:'inherit'}},label))
+        )
+      ),
+      React.createElement('div',{style:{padding:'12px 28px',background:'#F8FAFC',borderTop:'1px solid #E2E8F0',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+        React.createElement('span',{style:{fontSize:'11px',color:'#94A3B8',fontFamily:'inherit'}},'© 2026 Fareed Khan · lrmaip.com'),
+        React.createElement('button',{onClick:onClose,style:{background:'#0A2463',color:'white',border:'none',borderRadius:'8px',padding:'7px 16px',fontSize:'12px',fontWeight:700,cursor:'pointer',fontFamily:'inherit'}},'Close')
+      )
+    )
+  );
+}
+
 // ─── Sidebar ───
-function Sidebar({state,dispatch}){
+function Sidebar({state,dispatch,onAbout}){
   const modules=[
     {id:'dashboard',icon:'📊',label:'Dashboard'},
     {id:'query',icon:'💬',label:'Query'},
@@ -684,7 +733,11 @@ function Sidebar({state,dispatch}){
       },
         React.createElement('span',{className:'nav-icon'},m.icon),
         React.createElement('span',{className:'nav-label'},m.label)
-      ))
+      )),
+      React.createElement('button',{className:'nav-item',onClick:()=>onAbout&&onAbout(),style:{marginTop:'auto'}},
+        React.createElement('span',{className:'nav-icon'},'ℹ️'),
+        React.createElement('span',{className:'nav-label'},'About')
+      )
     )
   );
 }
@@ -727,6 +780,13 @@ function OnboardingScreen({dispatch}){
     /* Addition A — platform description */
     React.createElement('p',{style:{fontSize:13,color:'var(--text-secondary)',maxWidth:500,marginBottom:'var(--sp-4)',lineHeight:1.6}},
       'MAIP is an AI-powered market access intelligence platform. Upload your dataset and ask questions in plain English — no SQL, no filter menus, no pivot tables.'
+    ),
+    /* Attribution — Fareed Khan */
+    React.createElement('div',{style:{display:'flex',alignItems:'center',gap:'8px',justifyContent:'center',marginBottom:'16px',padding:'8px 16px',background:'rgba(10,36,99,0.06)',borderRadius:'8px',border:'1px solid rgba(10,36,99,0.12)'}},
+      React.createElement('span',{style:{fontSize:'11px',color:'#64748B',fontFamily:'inherit'}},'Built by'),
+      React.createElement('span',{style:{fontSize:'12px',fontWeight:700,color:'#0A2463',fontFamily:'inherit'}},'Fareed Khan'),
+      React.createElement('span',{style:{fontSize:'11px',color:'#CBD5E1'}},'·'),
+      React.createElement('a',{href:'https://lrmaip.com',target:'_blank',style:{fontSize:'11px',color:'#1E6091',textDecoration:'none',fontFamily:'inherit'}},'lrmaip.com')
     ),
     /* upload zone — unchanged */
     React.createElement('div',{className:'upload-zone',onClick:()=>dispatch({type:'SET',payload:{showUpload:true,uploadStep:1}})},
@@ -1166,6 +1226,7 @@ function App(){
   const [state,dispatch]=useReducer(reducer,init);
   const [feedbackOpen,setFeedbackOpen]=React.useState(false);
   const [feedbackMessage,setFeedbackMessage]=React.useState(null);
+  const [aboutOpen,setAboutOpen]=React.useState(false);
 
   useEffect(()=>{
     const handler=e=>{
@@ -1190,14 +1251,15 @@ function App(){
   };
 
   return React.createElement('div',{className:'app-layout'},
-    React.createElement(Sidebar,{state,dispatch}),
+    React.createElement(Sidebar,{state,dispatch,onAbout:()=>setAboutOpen(true)}),
     React.createElement('div',{className:'main-area'},
       React.createElement(Header,{state,dispatch}),
       React.createElement('div',{className:'content'},renderModule())
     ),
     state.showUpload&&React.createElement(UploadModal,{state,dispatch}),
     state.showSettings&&React.createElement(SettingsModal,{state,dispatch}),
-    feedbackOpen&&React.createElement(FeedbackModal,{message:feedbackMessage,onClose:()=>{setFeedbackOpen(false);setFeedbackMessage(null);}})
+    feedbackOpen&&React.createElement(FeedbackModal,{message:feedbackMessage,onClose:()=>{setFeedbackOpen(false);setFeedbackMessage(null);}}),
+    aboutOpen&&React.createElement(AboutModal,{onClose:()=>setAboutOpen(false)})
   );
 }
 
