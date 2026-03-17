@@ -1090,6 +1090,21 @@ async def usage_stats():
         "SELECT COUNT(*) FROM research_cache"
     ).fetchone()[0]
 
+    haiku_calls_today = conn.execute(
+        "SELECT COUNT(*) FROM audit_log "
+        "WHERE action='QUERY' AND timestamp > date('now')"
+    ).fetchone()[0]
+
+    sonnet_calls_today = conn.execute(
+        "SELECT COUNT(*) FROM audit_log "
+        "WHERE action='RESEARCH' AND timestamp > date('now')"
+    ).fetchone()[0]
+
+    conn.close()
+
+    _pct = round((_token_usage["count"] / DAILY_TOKEN_BUDGET) * 100, 1) if DAILY_TOKEN_BUDGET > 0 else 0
+    _status = "critical" if _pct >= 90 else "moderate" if _pct >= 70 else "healthy"
+
     return {
         "total_queries":          total_q,
         "total_sessions":         total_s,
@@ -1097,12 +1112,17 @@ async def usage_stats():
         "research_cache_entries": cached_r,
         "token_budget_used":      _token_usage["count"],
         "token_budget_limit":     DAILY_TOKEN_BUDGET,
-        "budget_pct_used":        round(
-            (_token_usage["count"] / DAILY_TOKEN_BUDGET) * 100, 1
-        ) if DAILY_TOKEN_BUDGET > 0 else 0,
+        "budget_pct_used":        _pct,
         "budget_resets_at":       datetime.fromtimestamp(
             _token_usage["reset_at"]
         ).isoformat(),
+        # Enriched fields for token usage indicator
+        "haiku_calls_today":      haiku_calls_today,
+        "sonnet_calls_today":     sonnet_calls_today,
+        "tokens_used_today":      _token_usage["count"],
+        "daily_token_limit":      DAILY_TOKEN_BUDGET,
+        "pct_used":               _pct,
+        "status":                 _status,
     }
 
 

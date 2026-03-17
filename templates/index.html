@@ -214,6 +214,16 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 .research-error-banner .error-text{flex:1}
 .research-error-banner .retry-btn{margin-left:auto;background:#3b82f6;color:white;border:none;border-radius:4px;padding:6px 14px;font-size:13px;cursor:pointer;white-space:nowrap}
 .research-error-banner .retry-btn:hover{background:#2563eb}
+.token-usage-bar{margin:12px 8px 8px;padding:12px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;font-size:12px}
+.tub-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.tub-title{color:#94a3b8;font-weight:600;letter-spacing:.03em;text-transform:uppercase;font-size:11px}
+.tub-status{font-size:11px;font-weight:600}
+.tub-track{height:5px;background:#1e293b;border-radius:99px;overflow:hidden;margin-bottom:10px}
+.tub-fill{height:100%;border-radius:99px;transition:width .5s ease,background .3s ease}
+.tub-row{display:flex;justify-content:space-between;align-items:baseline;margin-top:5px;gap:8px}
+.tub-label{color:#475569;font-size:11px;white-space:nowrap}
+.tub-value{color:#cbd5e1;font-size:11px;text-align:right}
+.tub-pct{color:#64748b}
 </style>
 </head>
 <body>
@@ -890,8 +900,43 @@ function AboutModal({onClose}){
   );
 }
 
+// ─── Token Usage Bar ───
+function TokenUsageBar({stats}){
+  if(!stats)return null;
+  const pct    = stats.pct_used??0;
+  const status = stats.status??'healthy';
+  const used   = (stats.tokens_used_today??0).toLocaleString();
+  const limit  = (stats.daily_token_limit??0).toLocaleString();
+  const calls  = stats.queries_today??0;
+  const haiku  = stats.haiku_calls_today??null;
+  const sonnet = stats.sonnet_calls_today??null;
+  const barColor={healthy:'#10b981',moderate:'#f59e0b',critical:'#ef4444'}[status]||'#10b981';
+  const statusLabel={healthy:'● Healthy',moderate:'● Moderate',critical:'⚠ High Usage'}[status]||'● Healthy';
+  return React.createElement('div',{className:'token-usage-bar'},
+    React.createElement('div',{className:'tub-header'},
+      React.createElement('span',{className:'tub-title'},'AI Usage Today'),
+      React.createElement('span',{className:'tub-status',style:{color:barColor}},statusLabel)
+    ),
+    React.createElement('div',{className:'tub-track'},
+      React.createElement('div',{className:'tub-fill',style:{width:`${Math.min(pct,100)}%`,background:barColor}})
+    ),
+    React.createElement('div',{className:'tub-row'},
+      React.createElement('span',{className:'tub-label'},'Tokens'),
+      React.createElement('span',{className:'tub-value'},`${used} / ${limit}`,React.createElement('span',{className:'tub-pct'},` (${pct}%)`))
+    ),
+    React.createElement('div',{className:'tub-row'},
+      React.createElement('span',{className:'tub-label'},'AI Calls'),
+      React.createElement('span',{className:'tub-value'},
+        haiku!==null&&sonnet!==null
+          ?`${calls} total — ${haiku} query / ${sonnet} research`
+          :`${calls} calls`
+      )
+    )
+  );
+}
+
 // ─── Sidebar ───
-function Sidebar({state,dispatch,onAbout}){
+function Sidebar({state,dispatch,onAbout,usageStats}){
   const modules=[
     {id:'dashboard',icon:'📊',label:'Dashboard'},
     {id:'query',icon:'💬',label:'Query'},
@@ -908,6 +953,7 @@ function Sidebar({state,dispatch,onAbout}){
         React.createElement('span',{className:'nav-icon'},m.icon),
         React.createElement('span',{className:'nav-label'},m.label)
       )),
+      React.createElement(TokenUsageBar,{stats:usageStats}),
       React.createElement('button',{className:'nav-item',onClick:()=>onAbout&&onAbout(),style:{marginTop:'auto'}},
         React.createElement('span',{className:'nav-icon'},'ℹ️'),
         React.createElement('span',{className:'nav-label'},'About')
@@ -1049,7 +1095,7 @@ function DataTable({rows,schema,page,onPageChange}){
 }
 
 // ─── Query Module ───
-function QueryModule({state,dispatch,onFeedback}){
+function QueryModule({state,dispatch,onFeedback,onStatsRefresh}){
   const [input,setInput]=useState('');
   const chatRef=useRef();
   const inputRef=useRef();
@@ -1087,6 +1133,7 @@ function QueryModule({state,dispatch,onFeedback}){
         confidence:res.confidence,suggestions:res.zero_result_suggestions||[],
         filterSpec:res.filter_spec,resultTab:'table'
       }});
+      onStatsRefresh&&onStatsRefresh();
     }catch(e){
       dispatch({type:'ADD_MSG',payload:{role:'ai',text:`Error: ${e.message}`}});
       dispatch({type:'SET',payload:{loading:false}});
@@ -1284,7 +1331,7 @@ function getResearchErrorDisplay(errorData){
   return{message,showRetry};
 }
 
-function IntelligenceModule({state,dispatch}){
+function IntelligenceModule({state,dispatch,onStatsRefresh}){
   const [subtype,setSubtype]=useState('competitive');
   const [product,setProduct]=useState('');
   const [country,setCountry]=useState('');
@@ -1315,6 +1362,7 @@ function IntelligenceModule({state,dispatch}){
         model:modelMap[state.m2Model]||undefined
       })});
       dispatch({type:'ADD_RESEARCH',payload:{...res,subtype,product,country,indication,timestamp:new Date().toLocaleTimeString()}});
+      onStatsRefresh&&onStatsRefresh();
     }catch(e){
       // Surface structured error in banner; do not create a raw error card
       setResearchError({user_message:e.message,retry_suggested:e.message!=='Request failed'&&!e.message.includes('limit')});
@@ -1419,6 +1467,20 @@ function App(){
   const [feedbackOpen,setFeedbackOpen]=React.useState(false);
   const [feedbackMessage,setFeedbackMessage]=React.useState(null);
   const [aboutOpen,setAboutOpen]=React.useState(false);
+  const [usageStats,setUsageStats]=React.useState(null);
+
+  const fetchStats=React.useCallback(async()=>{
+    try{
+      const res=await fetch('/api/stats');
+      if(res.ok){const data=await res.json();setUsageStats(data);}
+    }catch(_){}
+  },[]);
+
+  useEffect(()=>{
+    fetchStats();
+    const interval=setInterval(fetchStats,60000);
+    return()=>clearInterval(interval);
+  },[fetchStats]);
 
   useEffect(()=>{
     const handler=e=>{
@@ -1435,15 +1497,15 @@ function App(){
     if(!state.sessionId)return React.createElement(OnboardingScreen,{dispatch});
     switch(state.activeModule){
       case 'dashboard':return React.createElement(DashboardModule,{state,dispatch});
-      case 'query':return React.createElement(QueryModule,{state,dispatch,onFeedback:(m)=>{setFeedbackMessage(m);setFeedbackOpen(true);}});
-      case 'intelligence':return React.createElement(IntelligenceModule,{state,dispatch});
+      case 'query':return React.createElement(QueryModule,{state,dispatch,onFeedback:(m)=>{setFeedbackMessage(m);setFeedbackOpen(true);},onStatsRefresh:fetchStats});
+      case 'intelligence':return React.createElement(IntelligenceModule,{state,dispatch,onStatsRefresh:fetchStats});
       case 'export':return React.createElement(ExportModule,{state});
       default:return React.createElement(DashboardModule,{state,dispatch});
     }
   };
 
   return React.createElement('div',{className:'app-layout'},
-    React.createElement(Sidebar,{state,dispatch,onAbout:()=>setAboutOpen(true)}),
+    React.createElement(Sidebar,{state,dispatch,onAbout:()=>setAboutOpen(true),usageStats}),
     React.createElement('div',{className:'main-area'},
       React.createElement(Header,{state,dispatch}),
       React.createElement('div',{className:'content'},renderModule())
