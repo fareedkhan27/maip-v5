@@ -214,16 +214,12 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 .research-error-banner .error-text{flex:1}
 .research-error-banner .retry-btn{margin-left:auto;background:#3b82f6;color:white;border:none;border-radius:4px;padding:6px 14px;font-size:13px;cursor:pointer;white-space:nowrap}
 .research-error-banner .retry-btn:hover{background:#2563eb}
-.token-usage-bar{margin:12px 8px 8px;padding:12px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;font-size:12px}
-.tub-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.tub-title{color:#94a3b8;font-weight:600;letter-spacing:.03em;text-transform:uppercase;font-size:11px}
-.tub-status{font-size:11px;font-weight:600}
-.tub-track{height:5px;background:#1e293b;border-radius:99px;overflow:hidden;margin-bottom:10px}
-.tub-fill{height:100%;border-radius:99px;transition:width .5s ease,background .3s ease}
-.tub-row{display:flex;justify-content:space-between;align-items:baseline;margin-top:5px;gap:8px}
-.tub-label{color:#475569;font-size:11px;white-space:nowrap}
-.tub-value{color:#cbd5e1;font-size:11px;text-align:right}
-.tub-pct{color:#64748b}
+.token-chip{display:inline-flex;align-items:center;gap:6px;background:#0f172a;border:1px solid #1e293b;border-radius:99px;padding:4px 10px 4px 8px;font-size:11px;color:#cbd5e1;white-space:nowrap;cursor:default;user-select:none}
+.tc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.tc-track{width:40px;height:4px;background:#1e293b;border-radius:99px;overflow:hidden;flex-shrink:0}
+.tc-fill{height:100%;border-radius:99px;transition:width .5s ease,background .3s ease}
+.tc-label{color:#94a3b8}
+.tc-calls{color:#64748b;margin-left:2px}
 </style>
 </head>
 <body>
@@ -900,43 +896,29 @@ function AboutModal({onClose}){
   );
 }
 
-// ─── Token Usage Bar ───
-function TokenUsageBar({stats}){
+// ─── Token Chip ───
+function TokenChip({stats}){
   if(!stats)return null;
   const pct    = stats.pct_used??0;
   const status = stats.status??'healthy';
-  const used   = (stats.tokens_used_today??0).toLocaleString();
-  const limit  = (stats.daily_token_limit??0).toLocaleString();
-  const calls  = stats.queries_today??0;
-  const haiku  = stats.haiku_calls_today??null;
-  const sonnet = stats.sonnet_calls_today??null;
-  const barColor={healthy:'#10b981',moderate:'#f59e0b',critical:'#ef4444'}[status]||'#10b981';
-  const statusLabel={healthy:'● Healthy',moderate:'● Moderate',critical:'⚠ High Usage'}[status]||'● Healthy';
-  return React.createElement('div',{className:'token-usage-bar'},
-    React.createElement('div',{className:'tub-header'},
-      React.createElement('span',{className:'tub-title'},'AI Usage Today'),
-      React.createElement('span',{className:'tub-status',style:{color:barColor}},statusLabel)
+  const used   = stats.tokens_used_today??0;
+  const limit  = stats.daily_token_limit??0;
+  const calls  = (stats.haiku_calls_today??0)+(stats.sonnet_calls_today??0);
+  const dotColor={healthy:'#10b981',moderate:'#f59e0b',critical:'#ef4444'}[status]||'#10b981';
+  const usedK  = used>=1000?(used/1000).toFixed(1)+'k':String(used);
+  const limitK = limit>=1000?(limit/1000).toFixed(0)+'k':String(limit);
+  return React.createElement('div',{className:'token-chip',title:`AI tokens today: ${used.toLocaleString()} / ${limit.toLocaleString()} (${pct}%)`},
+    React.createElement('span',{className:'tc-dot',style:{background:dotColor}}),
+    React.createElement('span',{className:'tc-label'},`${usedK} / ${limitK}`),
+    React.createElement('div',{className:'tc-track'},
+      React.createElement('div',{className:'tc-fill',style:{width:`${Math.min(pct,100)}%`,background:dotColor}})
     ),
-    React.createElement('div',{className:'tub-track'},
-      React.createElement('div',{className:'tub-fill',style:{width:`${Math.min(pct,100)}%`,background:barColor}})
-    ),
-    React.createElement('div',{className:'tub-row'},
-      React.createElement('span',{className:'tub-label'},'Tokens'),
-      React.createElement('span',{className:'tub-value'},`${used} / ${limit}`,React.createElement('span',{className:'tub-pct'},` (${pct}%)`))
-    ),
-    React.createElement('div',{className:'tub-row'},
-      React.createElement('span',{className:'tub-label'},'AI Calls'),
-      React.createElement('span',{className:'tub-value'},
-        haiku!==null&&sonnet!==null
-          ?`${calls} total — ${haiku} query / ${sonnet} research`
-          :`${calls} calls`
-      )
-    )
+    React.createElement('span',{className:'tc-calls'},`Calls ${calls}`)
   );
 }
 
 // ─── Sidebar ───
-function Sidebar({state,dispatch,onAbout,usageStats}){
+function Sidebar({state,dispatch,onAbout}){
   const modules=[
     {id:'dashboard',icon:'📊',label:'Dashboard'},
     {id:'query',icon:'💬',label:'Query'},
@@ -953,7 +935,6 @@ function Sidebar({state,dispatch,onAbout,usageStats}){
         React.createElement('span',{className:'nav-icon'},m.icon),
         React.createElement('span',{className:'nav-label'},m.label)
       )),
-      React.createElement(TokenUsageBar,{stats:usageStats}),
       React.createElement('button',{className:'nav-item',onClick:()=>onAbout&&onAbout(),style:{marginTop:'auto'}},
         React.createElement('span',{className:'nav-icon'},'ℹ️'),
         React.createElement('span',{className:'nav-label'},'About')
@@ -963,13 +944,14 @@ function Sidebar({state,dispatch,onAbout,usageStats}){
 }
 
 // ─── Header ───
-function Header({state,dispatch}){
+function Header({state,dispatch,usageStats}){
   return React.createElement('div',{className:'header'},
     React.createElement('div',{className:'header-left'},
       React.createElement('h2',{style:{fontSize:16}},state.filename||'MAIP'),
       state.rowCount>0&&React.createElement('span',{className:'header-badge'},`${state.rowCount.toLocaleString()} rows`)
     ),
     React.createElement('div',{className:'header-right'},
+      React.createElement(TokenChip,{stats:usageStats}),
       React.createElement('button',{className:'btn btn-secondary btn-sm',onClick:()=>dispatch({type:'SET',payload:{showUpload:true,uploadStep:1}})},'📁 Load Data'),
       React.createElement('button',{className:'btn-icon',onClick:()=>dispatch({type:'SET',payload:{showSettings:true}})},'⚙️')
     )
@@ -1505,9 +1487,9 @@ function App(){
   };
 
   return React.createElement('div',{className:'app-layout'},
-    React.createElement(Sidebar,{state,dispatch,onAbout:()=>setAboutOpen(true),usageStats}),
+    React.createElement(Sidebar,{state,dispatch,onAbout:()=>setAboutOpen(true)}),
     React.createElement('div',{className:'main-area'},
-      React.createElement(Header,{state,dispatch}),
+      React.createElement(Header,{state,dispatch,usageStats}),
       React.createElement('div',{className:'content'},renderModule())
     ),
     state.showUpload&&React.createElement(UploadModal,{state,dispatch}),
