@@ -5,7 +5,7 @@
 # Create .env: ANTHROPIC_API_KEY=sk-ant-...
 # Run: python app.py → http://localhost:8000
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Header, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
@@ -23,7 +23,17 @@ import hashlib, re, difflib, time, traceback
 
 load_dotenv()
 
+ACCESS_KEY = os.getenv("ACCESS_KEY")
+if not ACCESS_KEY:
+    import sys
+    print("FATAL: ACCESS_KEY environment variable is not set. Server will not start.")
+    sys.exit(1)
+
 DAILY_TOKEN_BUDGET = int(os.getenv("DAILY_TOKEN_BUDGET", "500000"))
+
+def require_access_key(x_access_key: str = Header(default=None)):
+    if not x_access_key or x_access_key != ACCESS_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing access key.")
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "20"))
 SESSION_EXPIRY_HOURS = int(os.getenv("SESSION_EXPIRY_HOURS", "4"))
 
@@ -1068,7 +1078,7 @@ async def health():
     return {"status": "ok", "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY")), "db_path": DB_PATH}
 
 
-@app.get("/api/stats")
+@app.get("/api/stats", dependencies=[Depends(require_access_key)])
 async def usage_stats():
     """Admin usage overview — live token budget and query counts."""
     conn = get_db()
@@ -1126,7 +1136,7 @@ async def usage_stats():
     }
 
 
-@app.get("/api/feedback")
+@app.get("/api/feedback", dependencies=[Depends(require_access_key)])
 async def get_feedback(limit: int = 50):
     """
     Returns recent feedback entries for admin review.
@@ -1162,7 +1172,7 @@ async def get_feedback(limit: int = 50):
     }
 
 
-@app.get("/api/demo")
+@app.get("/api/demo", dependencies=[Depends(require_access_key)])
 async def demo(request: Request):
     """
     Creates a temporary 1-hour demo session with synthetic generic data.
@@ -1280,7 +1290,7 @@ async def demo(request: Request):
     }
 
 
-@app.post("/api/upload")
+@app.post("/api/upload", dependencies=[Depends(require_access_key)])
 @limiter.limit("10/hour")
 async def upload(request: Request, file: UploadFile = File(...)):
     # ── Guard 1: File extension ─────────────────────────────────────────
@@ -1378,7 +1388,7 @@ class QueryRequest(BaseModel):
     model: Optional[str] = None
 
 
-@app.post("/api/query")
+@app.post("/api/query", dependencies=[Depends(require_access_key)])
 @limiter.limit("30/hour")
 async def query(request: Request, body: QueryRequest):
     start = time.time()
@@ -1547,7 +1557,7 @@ class ResearchRequest(BaseModel):
     model: Optional[str] = None
 
 
-@app.post("/api/research")
+@app.post("/api/research", dependencies=[Depends(require_access_key)])
 @limiter.limit("5/hour")
 async def research(request: Request, body: ResearchRequest):
     start = time.time()
@@ -1634,7 +1644,7 @@ class ExportRequest(BaseModel):
     filters: Optional[dict] = None
 
 
-@app.post("/api/export/excel")
+@app.post("/api/export/excel", dependencies=[Depends(require_access_key)])
 async def export_excel(request: Request, body: ExportRequest):
     df, schema, profile, session = load_session(body.session_id)
 
@@ -1671,7 +1681,7 @@ class KPIRequest(BaseModel):
     session_id: int
 
 
-@app.post("/api/kpi")
+@app.post("/api/kpi", dependencies=[Depends(require_access_key)])
 async def kpi(request: Request, body: KPIRequest):
     df, schema, profile, session = load_session(body.session_id)
     stats = compute_stats(df, schema)
@@ -1705,7 +1715,7 @@ class GapRequest(BaseModel):
     session_id: int
 
 
-@app.post("/api/gap_analysis")
+@app.post("/api/gap_analysis", dependencies=[Depends(require_access_key)])
 async def gap_analysis(request: Request, body: GapRequest):
     df, schema, profile, session = load_session(body.session_id)
 
@@ -1781,7 +1791,7 @@ class FeedbackRequest(BaseModel):
     detail:      Optional[str] = None
 
 
-@app.post("/api/annotate")
+@app.post("/api/annotate", dependencies=[Depends(require_access_key)])
 async def annotate(request: Request, body: AnnotateRequest):
     conn = get_db()
     existing = conn.execute(
@@ -1806,7 +1816,7 @@ async def annotate(request: Request, body: AnnotateRequest):
     return {"status": "ok"}
 
 
-@app.get("/api/annotations/{session_id}")
+@app.get("/api/annotations/{session_id}", dependencies=[Depends(require_access_key)])
 async def get_annotations(session_id: int):
     conn = get_db()
     rows = conn.execute("SELECT * FROM annotations WHERE session_id=?", (session_id,)).fetchall()
@@ -1814,7 +1824,7 @@ async def get_annotations(session_id: int):
     return {"annotations": {r["row_key"]: {"note": r["note_text"], "author": r["author"], "updated_at": r["updated_at"]} for r in rows}}
 
 
-@app.get("/api/history/{session_id}")
+@app.get("/api/history/{session_id}", dependencies=[Depends(require_access_key)])
 async def get_history(session_id: int):
     conn = get_db()
     rows = conn.execute(
@@ -1837,7 +1847,7 @@ async def get_history(session_id: int):
     }
 
 
-@app.get("/api/sessions")
+@app.get("/api/sessions", dependencies=[Depends(require_access_key)])
 async def get_sessions():
     conn = get_db()
     rows = conn.execute("SELECT id, filename, row_count, loaded_at FROM sessions ORDER BY id DESC LIMIT 20").fetchall()
@@ -1845,7 +1855,7 @@ async def get_sessions():
     return {"sessions": [dict(r) for r in rows]}
 
 
-@app.get("/api/audit")
+@app.get("/api/audit", dependencies=[Depends(require_access_key)])
 async def get_audit():
     conn = get_db()
     rows = conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 100").fetchall()
@@ -1853,7 +1863,7 @@ async def get_audit():
     return {"log": [dict(r) for r in rows]}
 
 
-@app.post("/api/feedback")
+@app.post("/api/feedback", dependencies=[Depends(require_access_key)])
 async def submit_feedback(
     body: FeedbackRequest,
     request: Request

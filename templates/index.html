@@ -216,6 +216,14 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 .research-error-banner .retry-btn:hover{background:#2563eb}
 .token-chip{display:inline-flex;align-items:center;gap:6px;background:#0f172a;border:1px solid #1e293b;border-radius:99px;padding:4px 10px 4px 8px;font-size:11px;color:#cbd5e1;white-space:nowrap;cursor:default;user-select:none}
 .token-chip--loading{opacity:0.5;pointer-events:none}
+.access-gate{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-primary,#0f1117)}
+.access-gate-card{background:var(--bg-secondary,#1a1d27);border:1px solid var(--border,#2a2d3a);border-radius:12px;padding:40px;width:360px;text-align:center}
+.access-gate-card h2{font-size:1.4rem;font-weight:600;margin-bottom:8px}
+.access-gate-card p{color:var(--text-secondary,#8b8fa8);margin-bottom:24px;font-size:0.9rem}
+.access-gate-input{width:100%;padding:10px 14px;background:var(--bg-primary,#0f1117);border:1px solid var(--border,#2a2d3a);border-radius:8px;color:var(--text-primary,#e2e4f0);font-size:0.95rem;margin-bottom:16px;box-sizing:border-box}
+.access-gate-btn{width:100%;padding:10px;background:var(--accent,#4f6ef7);color:#fff;border:none;border-radius:8px;font-size:0.95rem;cursor:pointer;font-weight:500}
+.access-gate-btn:disabled{opacity:0.6;cursor:not-allowed}
+.access-gate-error{color:#f87171;font-size:0.85rem;margin-top:12px}
 .tc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .tc-track{width:40px;height:4px;background:#1e293b;border-radius:99px;overflow:hidden;flex-shrink:0}
 .tc-fill{height:100%;border-radius:99px;transition:width .5s ease,background .3s ease}
@@ -257,7 +265,8 @@ function reducer(state,action){
 }
 
 function api(path,opts={}){
-  return fetch(path,{headers:{'Content-Type':'application/json'},...opts}).then(r=>{
+  const base={headers:{'Content-Type':'application/json','x-access-key':sessionStorage.getItem('maip_access_key')||''}};
+  return fetch(path,{...base,...opts,headers:{...base.headers,...(opts.headers||{})}}).then(r=>{
     if(!r.ok)return r.json().then(e=>{throw new Error(e.detail||e.error||'Request failed')});
     return r.json();
   });
@@ -624,7 +633,7 @@ function UploadModal({state,dispatch}){
     setUploading(true);setError('');
     try{
       const fd=new FormData();fd.append('file',file);
-      const res=await fetch('/api/upload',{method:'POST',body:fd});
+      const res=await fetch('/api/upload',{method:'POST',headers:{'x-access-key':sessionStorage.getItem('maip_access_key')||''},body:fd});
       if(!res.ok){const e=await res.json();throw new Error(e.detail||'Upload failed');}
       const data=await res.json();
       dispatch({type:'SET',payload:{
@@ -790,7 +799,7 @@ function FeedbackModal({message,onClose}){
     try{
       const res=await fetch('/api/feedback',{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json','x-access-key':sessionStorage.getItem('maip_access_key')||''},
         body:JSON.stringify({
           session_id:message?.sessionId||null,
           query_text:message?.queryText||null,
@@ -1423,7 +1432,7 @@ function ExportModule({state}){
   const exportExcel=async()=>{
     setExporting(true);
     try{
-      const res=await fetch('/api/export/excel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:state.sessionId})});
+      const res=await fetch('/api/export/excel',{method:'POST',headers:{'Content-Type':'application/json','x-access-key':sessionStorage.getItem('maip_access_key')||''},body:JSON.stringify({session_id:state.sessionId})});
       const blob=await res.blob();
       const url=URL.createObjectURL(blob);
       const a=document.createElement('a');a.href=url;a.download=`${state.filename||'export'}_export.xlsx`;a.click();URL.revokeObjectURL(url);
@@ -1441,6 +1450,50 @@ function ExportModule({state}){
   );
 }
 
+// ─── Access Gate ───
+function AccessGate({onUnlocked}){
+  const [key,setKey]=React.useState('');
+  const [error,setError]=React.useState('');
+  const [checking,setChecking]=React.useState(false);
+  React.useEffect(()=>{
+    const stored=sessionStorage.getItem('maip_access_key');
+    if(stored)onUnlocked(stored);
+  },[]);
+  async function handleSubmit(){
+    if(!key.trim())return;
+    setChecking(true);setError('');
+    try{
+      const res=await fetch('/api/stats',{headers:{'x-access-key':key.trim()}});
+      if(res.ok){
+        sessionStorage.setItem('maip_access_key',key.trim());
+        onUnlocked(key.trim());
+      }else{
+        setError('Access denied. Check your key and try again.');
+      }
+    }catch{
+      setError('Connection error. Please retry.');
+    }finally{
+      setChecking(false);
+    }
+  }
+  return React.createElement('div',{className:'access-gate'},
+    React.createElement('div',{className:'access-gate-card'},
+      React.createElement('h2',null,'MAIP Access'),
+      React.createElement('p',null,'Enter your access key to continue.'),
+      React.createElement('input',{
+        type:'password',placeholder:'Access key',value:key,
+        onChange:e=>setKey(e.target.value),
+        onKeyDown:e=>e.key==='Enter'&&handleSubmit(),
+        className:'access-gate-input'
+      }),
+      React.createElement('button',{
+        onClick:handleSubmit,disabled:checking,className:'access-gate-btn'
+      },checking?'Checking…':'Unlock'),
+      error&&React.createElement('p',{className:'access-gate-error'},error)
+    )
+  );
+}
+
 // ─── App ───
 function App(){
   const savedM1=typeof localStorage!=='undefined'?localStorage.getItem('maip_m1'):null;
@@ -1449,6 +1502,7 @@ function App(){
   if(savedM1)init.m1Model=savedM1;
   if(savedM2)init.m2Model=savedM2;
 
+  const [accessKey,setAccessKey]=React.useState(null);
   const [state,dispatch]=useReducer(reducer,init);
   const [feedbackOpen,setFeedbackOpen]=React.useState(false);
   const [feedbackMessage,setFeedbackMessage]=React.useState(null);
@@ -1457,7 +1511,7 @@ function App(){
 
   const fetchStats=React.useCallback(async()=>{
     try{
-      const res=await fetch('/api/stats');
+      const res=await fetch('/api/stats',{headers:{'x-access-key':sessionStorage.getItem('maip_access_key')||''}});
       if(res.ok){const data=await res.json();setUsageStats(data);}
     }catch(_){}
   },[]);
@@ -1478,6 +1532,8 @@ function App(){
     window.addEventListener('keydown',handler);
     return()=>window.removeEventListener('keydown',handler);
   },[state.showUpload,state.showSettings]);
+
+  if(!accessKey)return React.createElement(AccessGate,{onUnlocked:setAccessKey});
 
   const renderModule=()=>{
     if(!state.sessionId)return React.createElement(OnboardingScreen,{dispatch});
