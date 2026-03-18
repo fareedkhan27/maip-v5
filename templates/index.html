@@ -1489,7 +1489,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
       state.researchCards.map((card,i)=>{
         const moduleId=SUBTYPE_TO_MODULE_ID[card.subtype]||null;
         return React.createElement('div',{key:i},
-        LEADERSHIP_MODULE_IDS.has(moduleId)&&card.result_text&&React.createElement(LeadershipSummaryCard,{moduleId,country:card.country||'',product:card.product||'',indication:card.indication||'',intelligenceText:card.result_text}),
+        LEADERSHIP_MODULE_IDS.has(moduleId)&&card.result_text&&card.result_text.length>100&&React.createElement(LeadershipSummaryCard,{moduleId,country:card.country||'',product:card.product||'',indication:card.indication||'',intelligenceText:card.result_text}),
         React.createElement('div',{className:'intel-card',style:{borderTop:`3px solid ${confColors[card.confidence]||'var(--border)'}`}},
         React.createElement('div',{className:'intel-card-header'},
           React.createElement('span',{className:'intel-badge',style:{background:'var(--c-navy-800)',color:'#fff'}},card.subtype),
