@@ -1481,6 +1481,12 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
   const [summary,setSummary]=React.useState(null);
   const [error,setError]=React.useState(null);
   const [fetched,setFetched]=React.useState(false);
+  React.useEffect(()=>{
+    if(intelligenceText&&intelligenceText.length>100&&!fetched){
+      setOpen(true);
+      fetchSummary();
+    }
+  },[intelligenceText]);
   async function fetchSummary(){
     if(fetched){setOpen(o=>!o);return;}
     setOpen(true);setLoading(true);setError(null);
@@ -1551,6 +1557,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
 
   const runResearch=async()=>{
     setResearchError(null);
+    if(state.researchCards.length>0){dispatch({type:'REMOVE_RESEARCH',index:0});}
     dispatch({type:'SET',payload:{researchLoading:true}});
     try{
       const modelMap={haiku:'claude-haiku-4-5-20251001',sonnet:'claude-sonnet-4-6'};
@@ -1613,7 +1620,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
       state.researchCards.map((card,i)=>{
         const moduleId=SUBTYPE_TO_MODULE_ID[card.subtype]||null;
         return React.createElement('div',{key:i},
-        LEADERSHIP_MODULE_IDS.has(moduleId)&&card.result_text&&card.result_text.length>100&&React.createElement(LeadershipSummaryCard,{moduleId,country:card.country||'',product:card.product||'',indication:card.indication||'',intelligenceText:card.result_text}),
+        LEADERSHIP_MODULE_IDS.has(moduleId)&&card.result_text&&card.result_text.length>100&&React.createElement(LeadershipSummaryCard,{key:[moduleId,card.country||'',card.product||'',card.indication||''].join('|'),moduleId,country:card.country||'',product:card.product||'',indication:card.indication||'',intelligenceText:card.result_text}),
         React.createElement('div',{className:'intel-card',style:{borderTop:`3px solid ${confColors[card.confidence]||'var(--border)'}`}},
         React.createElement('div',{className:'intel-card-header'},
           React.createElement('span',{className:'intel-badge',style:{background:'var(--c-navy-800)',color:'#fff'}},card.subtype),
