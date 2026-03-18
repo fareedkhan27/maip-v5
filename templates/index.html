@@ -233,24 +233,130 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 .tc-label{color:#94a3b8}
 .tc-calls{color:#64748b;margin-left:2px}
 
-/* Leadership Summary Card */
-.ls-wrapper{margin-bottom:16px}
-.ls-toggle-btn{width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(79,110,247,0.08);border:1px solid rgba(79,110,247,0.25);border-radius:8px;cursor:pointer;color:var(--text-primary,#e2e4f0);font-size:0.85rem;font-weight:500;letter-spacing:0.02em;transition:background 0.2s}
-.ls-toggle-btn:hover{background:rgba(79,110,247,0.15)}
-.ls-toggle-label{text-align:left}
-.ls-toggle-chevron{font-size:0.75rem;opacity:0.6;margin-left:8px}
-.ls-card{margin-top:4px;background:var(--bg-secondary,#1a1d27);border:1px solid rgba(79,110,247,0.2);border-radius:8px;overflow:hidden}
-.ls-card-header{padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.06);background:rgba(79,110,247,0.05)}
-.ls-meta{font-size:0.78rem;color:var(--text-secondary,#8b8fa8);letter-spacing:0.03em;text-transform:uppercase}
-.ls-fields{padding:12px 16px;display:flex;flex-direction:column;gap:10px}
-.ls-field-row{display:grid;grid-template-columns:200px 1fr;gap:12px;align-items:flex-start;font-size:0.85rem}
-.ls-field-label{color:var(--text-secondary,#8b8fa8);font-weight:500;white-space:nowrap}
-.ls-field-value{color:var(--text-primary,#e2e4f0);line-height:1.5}
-.ls-signal{margin:4px 16px 16px;padding:12px 16px;background:rgba(79,110,247,0.1);border-left:3px solid #4f6ef7;border-radius:0 6px 6px 0}
-.ls-signal-label{display:block;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;color:#4f6ef7;margin-bottom:6px;text-transform:uppercase}
-.ls-signal-text{margin:0;font-size:0.9rem;color:var(--text-primary,#e2e4f0);line-height:1.6;font-weight:500}
-.ls-loading{padding:20px 16px;font-size:0.85rem;color:var(--text-secondary,#8b8fa8);text-align:center}
-.ls-error{padding:14px 16px;font-size:0.85rem;color:#f87171}
+/* ── Leadership Summary Card ─────────────────── */
+.ls-wrapper {
+  margin-bottom: 20px;
+  font-family: 'DM Sans', 'Inter', sans-serif;
+}
+.ls-toggle-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 18px;
+  background: linear-gradient(135deg, rgba(79,110,247,0.12) 0%, rgba(99,130,255,0.06) 100%);
+  border: 1px solid rgba(79,110,247,0.35);
+  border-radius: 10px;
+  cursor: pointer;
+  color: #c8d0f0 !important;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+.ls-toggle-btn:hover {
+  background: linear-gradient(135deg, rgba(79,110,247,0.2) 0%, rgba(99,130,255,0.12) 100%);
+  border-color: rgba(79,110,247,0.6);
+  color: #ffffff !important;
+}
+.ls-toggle-label {
+  text-align: left;
+  color: inherit !important;
+}
+.ls-toggle-chevron {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-left: 10px;
+  color: inherit !important;
+}
+.ls-card {
+  margin-top: 6px;
+  background: #12151f;
+  border: 1px solid rgba(79,110,247,0.25);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ls-card-header {
+  padding: 10px 20px;
+  background: rgba(79,110,247,0.08);
+  border-bottom: 1px solid rgba(79,110,247,0.15);
+}
+.ls-meta {
+  font-size: 0.72rem;
+  color: #7b85c4 !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.ls-fields {
+  padding: 16px 20px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.ls-field-row {
+  display: grid;
+  grid-template-columns: 195px 1fr;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 0.84rem;
+}
+.ls-field-row:last-child {
+  border-bottom: none;
+}
+.ls-field-label {
+  color: #7b85c4 !important;
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  padding-top: 1px;
+  white-space: nowrap;
+}
+.ls-field-value {
+  color: #dde2f5 !important;
+  line-height: 1.55;
+  font-size: 0.84rem;
+  font-weight: 400;
+}
+.ls-signal {
+  margin: 12px 20px 20px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(79,110,247,0.14) 0%, rgba(99,130,255,0.08) 100%);
+  border-left: 3px solid #4f6ef7;
+  border-radius: 0 8px 8px 0;
+}
+.ls-signal-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #4f6ef7 !important;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.ls-signal-text {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #eef0fa !important;
+  line-height: 1.65;
+  font-weight: 500;
+}
+.ls-loading {
+  padding: 24px 20px;
+  font-size: 0.84rem;
+  color: #7b85c4 !important;
+  text-align: center;
+  letter-spacing: 0.03em;
+}
+.ls-error {
+  padding: 16px 20px;
+  font-size: 0.84rem;
+  color: #f87171 !important;
+  font-weight: 500;
+}
 </style>
 </head>
 <body>
