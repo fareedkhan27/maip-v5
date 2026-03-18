@@ -1777,6 +1777,96 @@ async def gap_analysis(request: Request, body: GapRequest):
     return {"gaps": gaps[:50]}
 
 
+class LeadershipSummaryRequest(BaseModel):
+    module_id: int
+    module_name: str
+    country: str
+    product: str
+    indication: str
+    intelligence_text: str  # full text output from the module
+
+
+@app.post("/api/leadership-summary", dependencies=[Depends(require_access_key)])
+@limiter.limit("10/hour")
+def leadership_summary(request: Request, body: LeadershipSummaryRequest):
+    SUPPORTED_MODULES = {3, 4, 5, 8}
+    if body.module_id not in SUPPORTED_MODULES:
+        raise HTTPException(status_code=400, detail="Module not supported for leadership summary.")
+    MODULE_PROMPTS = {
+        3: """You are a pharmaceutical market access intelligence analyst.
+Extract a structured leadership summary from the competitive landscape intelligence below.
+Return ONLY a valid JSON object. No preamble, no markdown, no explanation.
+JSON structure:
+{
+  "key_competitors": "string — approved products in this space, comma separated",
+  "their_access_status": "string — Reimbursed / Restricted / Mixed, with brief context",
+  "biosimilar_threat": "string — entry timeline if applicable, or 'Not applicable'",
+  "our_position": "string — Differentiated / At risk / Unclear, with one-line reason",
+  "access_gap": "string — where BMS leads or trails vs competitors",
+  "leadership_signal": "string — ONE sentence, action language, so-what only. No hedging."
+}""",
+        4: """You are a pharmaceutical market access intelligence analyst.
+Extract a structured leadership summary from the timeline intelligence below.
+Return ONLY a valid JSON object. No preamble, no markdown, no explanation.
+JSON structure:
+{
+  "current_milestone": "string — where in the reimbursement journey today",
+  "next_milestone": "string — what triggers the next step",
+  "estimated_timeline": "string — months to reimbursement decision",
+  "regional_benchmark": "string — vs CEE / LATAM / MEA average if available, else 'Benchmark unavailable'",
+  "delay_risk": "string — known blockers or 'No blockers identified'",
+  "leadership_signal": "string — ONE sentence. On track / at risk / action needed. No hedging."
+}""",
+        5: """You are a pharmaceutical market access intelligence analyst.
+Extract a structured leadership summary from the HTA and public sector intelligence below.
+Return ONLY a valid JSON object. No preamble, no markdown, no explanation.
+JSON structure:
+{
+  "hta_body": "string — name and decision framework of the relevant HTA body",
+  "evidence_standard": "string — Clinical / CEA / BIA / MCDA or combination",
+  "current_status": "string — stage in HTA journey",
+  "expected_timeline": "string — months to HTA decision",
+  "risk_rating": "string — Low / Medium / High / Blocked with one-line reason",
+  "leadership_signal": "string — ONE sentence. What this means for access strategy. No hedging."
+}""",
+        8: """You are a pharmaceutical market access intelligence analyst.
+Extract a structured leadership summary from the IRP risk intelligence below.
+Return ONLY a valid JSON object. No preamble, no markdown, no explanation.
+JSON structure:
+{
+  "reference_basket": "string — countries that reference this market for IRP",
+  "price_position": "string — Above / At / Below basket with brief context",
+  "cascade_exposure": "string — markets at risk if price is adjusted",
+  "financial_risk": "string — estimated exposure band or 'Insufficient data to estimate'",
+  "risk_level": "string — Low / Medium / High / Critical with one-line reason",
+  "leadership_signal": "string — ONE sentence. Recommended action or hold. No hedging."
+}"""
+    }
+    system_prompt = MODULE_PROMPTS[body.module_id]
+    user_message = f"""Country: {body.country}
+Product: {body.product}
+Indication: {body.indication}
+Intelligence Output:
+{body.intelligence_text[:8000]}"""
+    if not client:
+        return {"success": False, "error": "AI unavailable.", "module_id": body.module_id}
+    try:
+        response = call_anthropic_with_retry(
+            client.messages.create,
+            model="claude-sonnet-4-6",
+            max_tokens=600,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}]
+        )
+        raw = response.content[0].text.strip()
+        summary_data = json.loads(raw)
+        return {"success": True, "summary": summary_data, "module_id": body.module_id}
+    except (json.JSONDecodeError, ValueError):
+        return {"success": False, "error": "Summary parsing failed.", "module_id": body.module_id}
+    except Exception as e:
+        return {"success": False, "error": str(e), "module_id": body.module_id}
+
+
 class AnnotateRequest(BaseModel):
     session_id: int
     row_key: str
