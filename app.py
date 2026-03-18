@@ -1795,7 +1795,7 @@ def leadership_summary(request: Request, body: LeadershipSummaryRequest):
     MODULE_PROMPTS = {
         3: """You are a pharmaceutical market access intelligence analyst.
 Extract a structured leadership summary from the competitive landscape intelligence below.
-Return ONLY a valid JSON object. No preamble, no markdown, no explanation.
+Return ONLY a raw JSON object. No markdown, no code fences, no backticks, no preamble, no explanation. Start your response with { and end with }.
 JSON structure:
 {
   "key_competitors": "string — approved products in this space, comma separated",
@@ -1807,7 +1807,7 @@ JSON structure:
 }""",
         4: """You are a pharmaceutical market access intelligence analyst.
 Extract a structured leadership summary from the timeline intelligence below.
-Return ONLY a valid JSON object. No preamble, no markdown, no explanation.
+Return ONLY a raw JSON object. No markdown, no code fences, no backticks, no preamble, no explanation. Start your response with { and end with }.
 JSON structure:
 {
   "current_milestone": "string — where in the reimbursement journey today",
@@ -1819,7 +1819,7 @@ JSON structure:
 }""",
         5: """You are a pharmaceutical market access intelligence analyst.
 Extract a structured leadership summary from the HTA and public sector intelligence below.
-Return ONLY a valid JSON object. No preamble, no markdown, no explanation.
+Return ONLY a raw JSON object. No markdown, no code fences, no backticks, no preamble, no explanation. Start your response with { and end with }.
 JSON structure:
 {
   "hta_body": "string — name and decision framework of the relevant HTA body",
@@ -1831,7 +1831,7 @@ JSON structure:
 }""",
         8: """You are a pharmaceutical market access intelligence analyst.
 Extract a structured leadership summary from the IRP risk intelligence below.
-Return ONLY a valid JSON object. No preamble, no markdown, no explanation.
+Return ONLY a raw JSON object. No markdown, no code fences, no backticks, no preamble, no explanation. Start your response with { and end with }.
 JSON structure:
 {
   "reference_basket": "string — countries that reference this market for IRP",
@@ -1859,6 +1859,12 @@ Intelligence Output:
             messages=[{"role": "user", "content": user_message}]
         )
         raw = response.content[0].text.strip()
+        # Strip markdown code fences Sonnet sometimes wraps around JSON
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+        if raw.endswith("```"):
+            raw = raw.rsplit("```", 1)[0]
+        raw = raw.strip()
         summary_data = json.loads(raw)
         return {"success": True, "summary": summary_data, "module_id": body.module_id}
     except (json.JSONDecodeError, ValueError):
