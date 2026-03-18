@@ -1557,7 +1557,6 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
 
   const runResearch=async()=>{
     setResearchError(null);
-    if(state.researchCards.length>0){dispatch({type:'REMOVE_RESEARCH',index:0});}
     dispatch({type:'SET',payload:{researchLoading:true}});
     try{
       const modelMap={haiku:'claude-haiku-4-5-20251001',sonnet:'claude-sonnet-4-6'};
