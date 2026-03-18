@@ -243,32 +243,50 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 11px 18px;
-  background: linear-gradient(135deg, rgba(79,110,247,0.12) 0%, rgba(99,130,255,0.06) 100%);
-  border: 1px solid rgba(79,110,247,0.35);
+  padding: 13px 20px;
+  background: linear-gradient(135deg, #1e2a5e 0%, #16204a 100%);
+  border: 1px solid #4f6ef7;
   border-radius: 10px;
   cursor: pointer;
-  color: #c8d0f0 !important;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  color: #ffffff !important;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   transition: all 0.2s ease;
+  box-shadow: 0 0 0 0 rgba(79,110,247,0);
 }
 .ls-toggle-btn:hover {
-  background: linear-gradient(135deg, rgba(79,110,247,0.2) 0%, rgba(99,130,255,0.12) 100%);
-  border-color: rgba(79,110,247,0.6);
+  background: linear-gradient(135deg, #253475 0%, #1e2a5e 100%);
+  border-color: #7b9bff;
+  box-shadow: 0 0 18px rgba(79,110,247,0.25);
   color: #ffffff !important;
 }
 .ls-toggle-label {
-  text-align: left;
-  color: inherit !important;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #ffffff !important;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.ls-toggle-label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #4f6ef7;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(79,110,247,0.9);
+  flex-shrink: 0;
 }
 .ls-toggle-chevron {
-  font-size: 0.7rem;
-  opacity: 0.7;
+  font-size: 0.65rem;
+  opacity: 0.8;
   margin-left: 10px;
-  color: inherit !important;
+  color: #a0b0ff !important;
+  transition: transform 0.2s ease;
 }
 .ls-card {
   margin-top: 6px;
@@ -1478,7 +1496,7 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
   const title=MODULE_TITLES[moduleId]||'Leadership Summary';
   return React.createElement('div',{className:'ls-wrapper'},
     React.createElement('button',{className:'ls-toggle-btn',onClick:fetchSummary},
-      React.createElement('span',{className:'ls-toggle-label'},'📋 Leadership Summary — '+title),
+      React.createElement('span',{className:'ls-toggle-label'},'Leadership Summary — '+title.toUpperCase()),
       React.createElement('span',{className:'ls-toggle-chevron'},open?'▲':'▼')
     ),
     open&&React.createElement('div',{className:'ls-card'},
