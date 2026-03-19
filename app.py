@@ -1873,6 +1873,91 @@ Intelligence Output:
         return {"success": False, "error": str(e), "module_id": body.module_id}
 
 
+@app.get("/api/gap-analysis", dependencies=[Depends(require_access_key)])
+@limiter.limit("20/hour")
+async def gap_analysis(request: Request, session_id: str = Query(...)):
+    session = sessions.get(session_id)
+    if not session or session.get("df") is None:
+        raise HTTPException(status_code=404, detail="No dataset loaded.")
+    df = session["df"]
+    # Require Status column
+    if "Status" not in df.columns or "Country" not in df.columns:
+        raise HTTPException(status_code=400,
+            detail="Dataset missing required columns: Country, Status")
+    results = []
+    for country, grp in df.groupby("Country"):
+        total       = len(grp)
+        reimbursed  = (grp["Status"] == "Reimbursed").sum()
+        planned     = (grp["Status"] == "Planned").sum()
+        gap_pct     = round((planned / total) * 100, 1) if total > 0 else 0
+        # Indication count in gap
+        gap_rows = grp[grp["Status"] == "Planned"]
+        gap_indications = int(
+            gap_rows["Indication Details"].nunique()
+            if "Indication Details" in gap_rows.columns else 0
+        )
+        # Earliest Planned period — years in gap
+        years_in_gap = 0
+        if "Period" in gap_rows.columns and len(gap_rows) > 0:
+            try:
+                earliest = gap_rows["Period"].dropna().min()
+                # Period format YYYY-QN
+                year_str = str(earliest)[:4]
+                years_in_gap = max(0, 2026 - int(year_str))
+            except Exception:
+                years_in_gap = 0
+        # Composite score 0–100
+        # Weight: gap_pct (50%) + indication breadth (30%) + years (20%)
+        indication_score = min(gap_indications / 5 * 100, 100)
+        year_score       = min(years_in_gap / 5 * 100, 100)
+        composite = round(
+            (gap_pct * 0.5) + (indication_score * 0.3) + (year_score * 0.2), 1
+        )
+        # Tier classification
+        if composite >= 70:
+            tier = "Critical"
+        elif composite >= 45:
+            tier = "Defend"
+        elif composite >= 20:
+            tier = "Watch"
+        else:
+            tier = "Monitor"
+        # Region
+        region = grp["Region"].iloc[0] if "Region" in grp.columns else "Unknown"
+        # Action flag
+        if tier == "Critical":
+            action = "Immediate engagement — all indications in access gap"
+        elif tier == "Defend":
+            action = "Targeted submission required — partial access at risk"
+        elif tier == "Watch":
+            action = "Monitor — reimbursement trajectory uncertain"
+        else:
+            action = "Stable — maintain current access strategy"
+        results.append({
+            "country":         country,
+            "region":          region,
+            "score":           composite,
+            "tier":            tier,
+            "gap_pct":         gap_pct,
+            "reimbursed":      int(reimbursed),
+            "planned":         int(planned),
+            "gap_indications": gap_indications,
+            "years_in_gap":    years_in_gap,
+            "action":          action
+        })
+    # Sort by score descending
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return {
+        "success":  True,
+        "markets":  results,
+        "total":    len(results),
+        "critical": sum(1 for r in results if r["tier"] == "Critical"),
+        "defend":   sum(1 for r in results if r["tier"] == "Defend"),
+        "watch":    sum(1 for r in results if r["tier"] == "Watch"),
+        "monitor":  sum(1 for r in results if r["tier"] == "Monitor"),
+    }
+
+
 class AnnotateRequest(BaseModel):
     session_id: int
     row_key: str
