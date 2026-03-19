@@ -375,6 +375,34 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
   color: #f87171 !important;
   font-weight: 500;
 }
+/* ── Leadership Briefing PDF Export ─────────── */
+.ls-export-row {
+  padding: 12px 20px 18px;
+  display: flex;
+  justify-content: flex-end;
+}
+.ls-export-btn {
+  padding: 8px 18px;
+  background: rgba(79,110,247,0.1);
+  border: 1px solid rgba(79,110,247,0.3);
+  border-radius: 8px;
+  color: #a0b0ff !important;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ls-export-btn:hover:not(:disabled) {
+  background: rgba(79,110,247,0.2);
+  border-color: #4f6ef7;
+  color: #ffffff !important;
+}
+.ls-export-btn-disabled,
+.ls-export-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 /* ── Gap Market Priority Score ───────────────── */
 .gap-nav-btn {
   background: none;
@@ -564,6 +592,10 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+  crossorigin="anonymous">
+</script>
 <script type="text/babel">
 const {useState,useEffect,useReducer,useRef,useCallback,useMemo}=React;
 
@@ -1660,6 +1692,143 @@ const MODULE_FIELD_LABELS={
 };
 const MODULE_TITLES={3:'Competitive Intelligence Summary',4:'Timeline Intelligence Summary',5:'HTA Intelligence Summary',8:'IRP Risk Summary'};
 
+function jsPDFAvailable() {
+  return typeof window !== 'undefined'
+    && window.jspdf
+    && typeof window.jspdf.jsPDF === 'function';
+}
+
+function exportBriefingPDF(moduleTitle, country, product,
+                            indication, summary, fields) {
+  if (!jsPDFAvailable()) {
+    alert('PDF export is not available. Please refresh the page and try again.');
+    return;
+  }
+  if (!summary || !fields || fields.length === 0) {
+    alert('Summary data is not ready. Please wait for the summary to load.');
+    return;
+  }
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+    const W = 210, H = 297;
+    const margin = 20;
+    let y = 0;
+    // Background
+    doc.setFillColor(15, 17, 23);
+    doc.rect(0, 0, W, H, 'F');
+    // Header bar
+    doc.setFillColor(26, 29, 39);
+    doc.rect(0, 0, W, 38, 'F');
+    // Accent line
+    doc.setFillColor(79, 110, 247);
+    doc.rect(0, 38, W, 1.5, 'F');
+    // MAIP label
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(79, 110, 247);
+    doc.text('MAIP  \u00b7  MARKET ACCESS INTELLIGENCE PLATFORM', margin, 13);
+    // Module title
+    doc.setFontSize(15);
+    doc.setTextColor(238, 240, 250);
+    const safeTile = (moduleTitle || 'Leadership Summary').toUpperCase();
+    doc.text(safeTile, margin, 26);
+    // Meta line
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(123, 133, 196);
+    const meta = [country, product, indication].filter(Boolean).join('  \u00b7  ');
+    doc.text(meta || '\u2014', margin, 33);
+    // Date — top right
+    const dateStr = new Date().toLocaleDateString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric'
+    });
+    doc.text(dateStr, W - margin, 33, { align: 'right' });
+    y = 52;
+    // Field rows
+    fields.forEach(([key, label]) => {
+      const value = summary[key];
+      if (!value) return;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(123, 133, 196);
+      doc.text(String(label), margin, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(221, 226, 245);
+      const lines = doc.splitTextToSize(String(value), W - margin * 2 - 10);
+      doc.text(lines, margin + 8, y + 5);
+      y += 7 + (lines.length * 5);
+      doc.setDrawColor(42, 45, 58);
+      doc.line(margin, y, W - margin, y);
+      y += 6;
+      if (y > H - 40) {
+        doc.addPage();
+        doc.setFillColor(15, 17, 23);
+        doc.rect(0, 0, W, H, 'F');
+        y = 20;
+      }
+    });
+    y += 4;
+    // Leadership Signal block
+    if (summary.leadership_signal) {
+      const sigText  = String(summary.leadership_signal);
+      const sigLines = doc.splitTextToSize(sigText, W - margin * 2 - 16);
+      const blockH   = 10 + sigLines.length * 5.5;
+      if (y + blockH > H - 30) {
+        doc.addPage();
+        doc.setFillColor(15, 17, 23);
+        doc.rect(0, 0, W, H, 'F');
+        y = 20;
+      }
+      doc.setFillColor(20, 28, 65);
+      doc.roundedRect(margin, y, W - margin * 2, blockH, 3, 3, 'F');
+      doc.setFillColor(79, 110, 247);
+      doc.roundedRect(margin, y, 3, blockH, 1, 1, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(79, 110, 247);
+      doc.text('LEADERSHIP SIGNAL', margin + 8, y + 6);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(238, 240, 250);
+      doc.text(sigLines, margin + 8, y + 12);
+      y += blockH + 12;
+    }
+    // Footer
+    doc.setFillColor(26, 29, 39);
+    doc.rect(0, H - 16, W, 16, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(74, 80, 128);
+    doc.text(
+      'Generated by MAIP  \u00b7  lrmaip.com  \u00b7  Confidential',
+      W / 2, H - 7, { align: 'center' }
+    );
+    function safeSegment(s) {
+      return (s || 'unknown')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/_+/g, '_')
+        .substring(0, 30);
+    }
+    const filename = [
+      'MAIP',
+      safeSegment(country),
+      safeSegment(product),
+      safeSegment(moduleTitle),
+      dateStr.replace(/\s/g, '')
+    ].join('_') + '.pdf';
+    doc.save(filename);
+  } catch (err) {
+    alert('PDF export failed: ' + err.message);
+    console.error('exportBriefingPDF error:', err);
+  }
+}
+
 function LeadershipSummaryCard({moduleId,country,product,indication,intelligenceText}){
   const [open,setOpen]=React.useState(false);
   const [loading,setLoading]=React.useState(false);
@@ -1706,7 +1875,19 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
         summary.leadership_signal&&React.createElement('div',{className:'ls-signal'},
           React.createElement('span',{className:'ls-signal-label'},'⚡ LEADERSHIP SIGNAL'),
           React.createElement('p',{className:'ls-signal-text'},summary.leadership_signal)
-        )
+        ),
+        (()=>{
+          const exportFields=MODULE_FIELD_LABELS[moduleId]||[];
+          const exportTitle=MODULE_TITLES[moduleId]||'Leadership Summary';
+          return React.createElement('div',{className:'ls-export-row'},
+            React.createElement('button',{
+              className:'ls-export-btn'+((!jsPDFAvailable())?' ls-export-btn-disabled':''),
+              disabled:!jsPDFAvailable(),
+              title:jsPDFAvailable()?'Download as PDF':'PDF export unavailable — refresh page',
+              onClick:()=>exportBriefingPDF(exportTitle,country,product,indication,summary,exportFields)
+            },'\u2b07 Export Briefing PDF')
+          );
+        })()
       )
     )
   );
