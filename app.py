@@ -2079,7 +2079,6 @@ async def get_indications(
 
     # ── Layer 2: AI enrichment (Haiku + web_search) ──────
     ai_indications = []
-    ai_error_detail = ""
     try:
         system_prompt = (
             "You are a pharmaceutical regulatory specialist. "
@@ -2108,29 +2107,31 @@ async def get_indications(
             }],
             messages=[{"role": "user", "content": user_msg}]
         )
-        # Extract text from response — may contain tool_use blocks
+        # Extract text from response — may contain preamble + tool_use blocks
+        # before the final JSON text block; use the LAST non-empty text block
         raw_text = ""
         for block in response.content:
             if hasattr(block, "type") and block.type == "text":
-                raw_text = block.text.strip()
-                break
+                candidate = block.text.strip()
+                if candidate:
+                    raw_text = candidate  # keep updating — last non-empty wins
         if raw_text:
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[-1]
             if raw_text.endswith("```"):
                 raw_text = raw_text.rsplit("```", 1)[0]
             raw_text = raw_text.strip()
+        if raw_text:  # re-check after fence stripping
             parsed = json.loads(raw_text)
             if isinstance(parsed, list):
                 ai_indications = [
                     str(i).strip() for i in parsed
                     if str(i).strip()
                 ]
-    except Exception as ai_err:
+    except Exception:
         # AI enrichment failure is non-fatal —
         # dataset indications still returned
         ai_indications = []
-        ai_error_detail = str(ai_err)
 
     # ── Layer 3: Merge and deduplicate ───────────────────
     seen    = set()
@@ -2146,13 +2147,12 @@ async def get_indications(
             seen.add(key)
             results.append({"label": ind, "source": "FDA/EMA"})
     return {
-        "success":        True,
-        "product":        product,
-        "indications":    results,
-        "total":          len(results),
-        "from_dataset":   len(dataset_indications),
-        "from_ai":        len(ai_indications),
-        "debug_ai_error": ai_error_detail  # TEMPORARY
+        "success":      True,
+        "product":      product,
+        "indications":  results,
+        "total":        len(results),
+        "from_dataset": len(dataset_indications),
+        "from_ai":      len(ai_indications)
     }
 
 
