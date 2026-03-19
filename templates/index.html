@@ -2747,7 +2747,7 @@ function CoveragePanel({product,country,sessionId,fdaIndications}){
     }
     load();
     return()=>{cancelled=true;};
-  },[product,country,fdaIndications.join('|')]);
+  },[product,country,(fdaIndications||[]).join('|')]);
   if(!fdaIndications||fdaIndications.length===0)return null;
   if(!product||!country)return null;
   return React.createElement('div',{className:'cov-panel'},
