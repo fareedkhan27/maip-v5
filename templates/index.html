@@ -2543,7 +2543,7 @@ function IndicationLookup({product,sessionId,currentValue,onSelect}){
             onClick:()=>{onSelect(item.label);setOpen(false);}
           },
             React.createElement('span',{className:'ind-item-label'},item.label),
-            React.createElement('span',{className:'ind-item-source ind-source-'+item.source.replace('/','').replace(' ','-').toLowerCase()},item.source)
+            React.createElement('span',{className:'ind-item-source ind-source-'+item.source.replace('/','-').toLowerCase()},item.source)
           )
         )
       ),
