@@ -2049,6 +2049,110 @@ async def gap_analysis(request: Request, session_id: int = Query(...)):
     }
 
 
+@app.get("/api/indications",
+         dependencies=[Depends(require_access_key)])
+@limiter.limit("20/hour")
+async def get_indications(
+    request: Request,
+    product: str = Query(...),
+    session_id: str = Query(...)
+):
+    # ── Layer 1: Dataset extraction ──────────────────────
+    dataset_indications = []
+    try:
+        df, schema, profile, session = load_session(int(session_id))
+        df.columns = [c.strip() for c in df.columns]
+        col_map = {c.lower(): c for c in df.columns}
+        product_col = col_map.get("product")
+        ind_col     = col_map.get("indication details")
+        if product_col and ind_col:
+            mask = df[product_col].str.strip().str.lower() \
+                   == product.strip().lower()
+            raw_inds = df.loc[mask, ind_col].dropna().unique()
+            dataset_indications = [
+                str(i).strip() for i in raw_inds
+                if str(i).strip()
+            ]
+    except Exception:
+        # Session not found or column mismatch — non-fatal
+        dataset_indications = []
+
+    # ── Layer 2: AI enrichment (Haiku + web_search) ──────
+    ai_indications = []
+    try:
+        system_prompt = (
+            "You are a pharmaceutical regulatory specialist. "
+            "Return ONLY a valid JSON array of strings. "
+            "No markdown, no code fences, no preamble. "
+            "Start with [ and end with ]. "
+            "Each string is one approved indication name, "
+            "short form preferred (e.g. 'NSCLC', 'RCC', "
+            "'Melanoma', 'HCC'). Maximum 15 items."
+        )
+        user_msg = (
+            f"List all currently FDA-approved and EMA-approved "
+            f"oncology indications for {product} (generic name "
+            f"if brand name given). Use web search to verify "
+            f"current label. Return only the indication names "
+            f"as a JSON array."
+        )
+        response = call_anthropic_with_retry(
+            client.messages.create,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
+            system=system_prompt,
+            tools=[{
+                "type": "web_search_20250305",
+                "name": "web_search"
+            }],
+            messages=[{"role": "user", "content": user_msg}]
+        )
+        # Extract text from response — may contain tool_use blocks
+        raw_text = ""
+        for block in response.content:
+            if hasattr(block, "type") and block.type == "text":
+                raw_text = block.text.strip()
+                break
+        if raw_text:
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("\n", 1)[-1]
+            if raw_text.endswith("```"):
+                raw_text = raw_text.rsplit("```", 1)[0]
+            raw_text = raw_text.strip()
+            parsed = json.loads(raw_text)
+            if isinstance(parsed, list):
+                ai_indications = [
+                    str(i).strip() for i in parsed
+                    if str(i).strip()
+                ]
+    except Exception:
+        # AI enrichment failure is non-fatal —
+        # dataset indications still returned
+        ai_indications = []
+
+    # ── Layer 3: Merge and deduplicate ───────────────────
+    seen    = set()
+    results = []
+    for ind in dataset_indications:
+        key = ind.lower().strip()
+        if key not in seen:
+            seen.add(key)
+            results.append({"label": ind, "source": "Dataset"})
+    for ind in ai_indications:
+        key = ind.lower().strip()
+        if key not in seen:
+            seen.add(key)
+            results.append({"label": ind, "source": "FDA/EMA"})
+    return {
+        "success":      True,
+        "product":      product,
+        "indications":  results,
+        "total":        len(results),
+        "from_dataset": len(dataset_indications),
+        "from_ai":      len(ai_indications)
+    }
+
+
 class AnnotateRequest(BaseModel):
     session_id: int
     row_key: str

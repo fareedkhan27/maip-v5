@@ -468,6 +468,171 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 }
 .rec-pill:hover .rec-pill-text   { color: #ffffff; }
 .rec-pill:hover .rec-pill-reason { color: #a0b0ff; }
+/* ── Indication Lookup ───────────────────────── */
+.ind-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ind-input-padded {
+  flex: 1;
+  padding-right: 8px;
+}
+.ind-lookup-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  background: rgba(79,110,247,0.1);
+  border: 1px solid rgba(79,110,247,0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+}
+.ind-lookup-btn:hover:not(:disabled) {
+  background: rgba(79,110,247,0.2);
+  border-color: #4f6ef7;
+}
+.ind-lookup-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.ind-lookup-btn-loading {
+  animation: ind-spin 1s linear infinite;
+}
+@keyframes ind-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.ind-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #12151f;
+  border: 1px solid rgba(79,110,247,0.3);
+  border-radius: 10px;
+  z-index: 500;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  overflow: hidden;
+  min-width: 260px;
+}
+.ind-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(79,110,247,0.07);
+}
+.ind-dropdown-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #a0b0ff;
+  letter-spacing: 0.03em;
+}
+.ind-dropdown-close {
+  background: none;
+  border: none;
+  color: #4a5080;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0 2px;
+  line-height: 1;
+}
+.ind-dropdown-close:hover { color: #f87171; }
+.ind-filter-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.ind-filter-tab {
+  flex: 1;
+  padding: 7px 4px;
+  background: none;
+  border: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #4a5080;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  border-bottom: 2px solid transparent;
+}
+.ind-filter-tab:hover { color: #7b85c4; }
+.ind-filter-tab-active {
+  color: #a0b0ff;
+  border-bottom-color: #4f6ef7;
+}
+.ind-dropdown-loading,
+.ind-dropdown-empty {
+  padding: 16px 14px;
+  font-size: 0.82rem;
+  color: #4a5080;
+  text-align: center;
+}
+.ind-dropdown-error {
+  padding: 12px 14px;
+  font-size: 0.8rem;
+  color: #f87171;
+}
+.ind-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.ind-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+  gap: 8px;
+}
+.ind-item:hover { background: rgba(79,110,247,0.1); }
+.ind-item-selected { background: rgba(79,110,247,0.15); }
+.ind-item-label {
+  font-size: 0.84rem;
+  color: #dde2f5;
+  font-weight: 500;
+  flex: 1;
+}
+.ind-item:hover .ind-item-label { color: #ffffff; }
+.ind-item-source {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.ind-source-dataset {
+  background: rgba(52,211,153,0.12);
+  color: #34d399;
+  border: 1px solid rgba(52,211,153,0.25);
+}
+.ind-source-fda-ema {
+  background: rgba(79,110,247,0.12);
+  color: #a0b0ff;
+  border: 1px solid rgba(79,110,247,0.25);
+}
+.ind-dropdown-footer {
+  padding: 8px 14px;
+  font-size: 0.72rem;
+  color: #4a5080;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  background: rgba(255,255,255,0.02);
+}
 /* ── Cross-Market Comparison ─────────────────── */
 .cmp-overlay {
   position: fixed;
@@ -2306,6 +2471,92 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
   );
 }
 
+// ─── Indication Lookup ───
+function IndicationLookup({product,sessionId,currentValue,onSelect}){
+  const [open,    setOpen]    = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [results, setResults] = React.useState([]);
+  const [error,   setError]   = React.useState(null);
+  const [cache,   setCache]   = React.useState({});
+  const [filter,  setFilter]  = React.useState('All');
+  async function fetchIndications(){
+    if(!product||!sessionId)return;
+    if(cache[product]){
+      setResults(cache[product]);
+      setOpen(true);
+      return;
+    }
+    setLoading(true);setError(null);setOpen(true);
+    try{
+      const res=await fetch(
+        `/api/indications?product=${encodeURIComponent(product)}&session_id=${encodeURIComponent(sessionId)}`,
+        {headers:{'x-access-key':sessionStorage.getItem('maip_access_key')||''}}
+      );
+      const data=await res.json();
+      if(!res.ok){
+        setError(data.detail||`Error ${res.status}`);setResults([]);
+      }else if(data.success){
+        setResults(data.indications||[]);
+        setCache(prev=>({...prev,[product]:data.indications||[]}));
+      }else{
+        setError('Could not retrieve indications.');setResults([]);
+      }
+    }catch(e){
+      setError('Connection error: '+e.message);setResults([]);
+    }finally{
+      setLoading(false);
+    }
+  }
+  React.useEffect(()=>{setOpen(false);setFilter('All');},[product]);
+  const filtered=filter==='All'?results:results.filter(r=>r.source===filter);
+  const hasDataset=results.some(r=>r.source==='Dataset');
+  const hasAI=results.some(r=>r.source==='FDA/EMA');
+  return React.createElement('div',{className:'ind-lookup-wrap'},
+    React.createElement('button',{
+      className:'ind-lookup-btn'+(loading?' ind-lookup-btn-loading':''),
+      onClick:fetchIndications,
+      disabled:loading||!product,
+      title:product?`Fetch approved indications for ${product}`:'Select a product first'
+    },loading?'\u23f3':'\u2728'),
+    open&&React.createElement('div',{className:'ind-dropdown'},
+      React.createElement('div',{className:'ind-dropdown-header'},
+        React.createElement('span',{className:'ind-dropdown-title'},product+' Indications'),
+        React.createElement('button',{className:'ind-dropdown-close',onClick:()=>setOpen(false)},'\u2715')
+      ),
+      hasDataset&&hasAI&&React.createElement('div',{className:'ind-filter-tabs'},
+        ['All','Dataset','FDA/EMA'].map(tab=>
+          React.createElement('button',{
+            key:tab,
+            className:'ind-filter-tab'+(filter===tab?' ind-filter-tab-active':''),
+            onClick:()=>setFilter(tab)
+          },tab)
+        )
+      ),
+      loading&&React.createElement('div',{className:'ind-dropdown-loading'},'Fetching verified indications\u2026'),
+      error&&React.createElement('div',{className:'ind-dropdown-error'},error),
+      !loading&&!error&&filtered.length===0&&React.createElement('div',{className:'ind-dropdown-empty'},'No indications found for this product.'),
+      !loading&&!error&&filtered.length>0&&React.createElement('ul',{className:'ind-list'},
+        filtered.map((item,i)=>
+          React.createElement('li',{
+            key:i,
+            className:'ind-item'+(currentValue&&currentValue.toLowerCase().trim()===item.label.toLowerCase().trim()?' ind-item-selected':''),
+            onClick:()=>{onSelect(item.label);setOpen(false);}
+          },
+            React.createElement('span',{className:'ind-item-label'},item.label),
+            React.createElement('span',{className:'ind-item-source ind-source-'+item.source.replace('/','').replace(' ','-').toLowerCase()},item.source)
+          )
+        )
+      ),
+      !loading&&results.length>0&&React.createElement('div',{className:'ind-dropdown-footer'},
+        `${results.length} indications found`+
+        (hasDataset?` \u00b7 ${results.filter(r=>r.source==='Dataset').length} in your dataset`:'')+
+        (hasDataset&&hasAI?' \u00b7 ':'')+
+        (hasAI?`${results.filter(r=>r.source==='FDA/EMA').length} from FDA/EMA`:'')
+      )
+    )
+  );
+}
+
 // ─── Market Intelligence Module ───
 function getResearchErrorDisplay(errorData){
   if(!errorData)return{message:'An unexpected error occurred.',showRetry:false};
@@ -2375,7 +2626,10 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
         cv.map(c=>React.createElement('option',{key:c,value:c},c))
       ),
       React.createElement('label',{className:'mi-label'},'Indication'),
-      React.createElement('input',{className:'mi-select',placeholder:'e.g. NSCLC, RCC...',value:indication,onChange:e=>setIndication(e.target.value)}),
+      React.createElement('div',{className:'ind-input-wrap'},
+        React.createElement('input',{className:'mi-select ind-input-padded',placeholder:'Type or click \u2728 to fetch',value:indication,onChange:e=>setIndication(e.target.value)}),
+        React.createElement(IndicationLookup,{product,sessionId:state.sessionId,currentValue:indication,onSelect:value=>setIndication(value)})
+      ),
       React.createElement('button',{className:'btn btn-primary',style:{width:'100%',marginTop:16,justifyContent:'center'},onClick:runResearch,disabled:state.researchLoading},
         state.researchLoading?React.createElement('span',{className:'spinner'}):null,
         state.researchLoading?' Researching...':'🔍 Run Research'
