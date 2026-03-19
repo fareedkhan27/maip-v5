@@ -1912,9 +1912,10 @@ const MODULE_META = {
   11: { label: 'Payer Landscape',       icon: '💼'  },
 };
 
-function getRecommendations(currentModuleId, resultText) {
+function getRecommendations(currentModuleId, resultText, ranModuleIds) {
   if (!resultText || resultText.length < 100) return [];
   if (!currentModuleId) return [];
+  const alreadyRan = new Set(ranModuleIds || []);
   const t = resultText.toLowerCase();
   const recs = [];
   const rules = [
@@ -1933,7 +1934,7 @@ function getRecommendations(currentModuleId, resultText) {
     if (rule.from !== currentModuleId) continue;
     if (recs.length >= 2) break;
     if (recs.some(r => r.moduleId === rule.suggest)) continue;
-    if (rule.detect.some(kw => t.includes(kw))) {
+    if (rule.detect.some(kw => t.includes(kw)) && !alreadyRan.has(rule.suggest)) {
       recs.push({ moduleId: rule.suggest, reason: rule.reason });
     }
   }
@@ -2396,7 +2397,8 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
       ),
       state.researchCards.map((card,i)=>{
         const moduleId=SUBTYPE_TO_MODULE_ID[card.subtype]||null;
-        const cardRecs=getRecommendations(moduleId,card.result_text);
+        const ranModuleIds=(state.researchCards||[]).map(c=>SUBTYPE_TO_MODULE_ID[c.subtype]||null).filter(Boolean);
+        const cardRecs=getRecommendations(moduleId,card.result_text,ranModuleIds);
         function handleRecommendationSelect(recModuleId){
           const subtypeStr=MODULE_ID_TO_SUBTYPE[recModuleId];
           if(subtypeStr)setSubtype(subtypeStr);
