@@ -1875,11 +1875,8 @@ Intelligence Output:
 
 @app.get("/api/gap-analysis", dependencies=[Depends(require_access_key)])
 @limiter.limit("20/hour")
-async def gap_analysis(request: Request, session_id: str = Query(...)):
-    session = sessions.get(session_id)
-    if not session or session.get("df") is None:
-        raise HTTPException(status_code=404, detail="No dataset loaded.")
-    df = session["df"]
+async def gap_analysis(request: Request, session_id: int = Query(...)):
+    df, schema, profile, session = load_session(session_id)
     # Require Status column
     if "Status" not in df.columns or "Country" not in df.columns:
         raise HTTPException(status_code=400,
