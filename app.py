@@ -1558,7 +1558,7 @@ class ResearchRequest(BaseModel):
 
 
 @app.post("/api/research", dependencies=[Depends(require_access_key)])
-@limiter.limit("5/hour")
+@limiter.limit("3/hour")
 async def research(request: Request, body: ResearchRequest):
     start = time.time()
 
@@ -1850,7 +1850,7 @@ class CompareMarketsRequest(BaseModel):
 
 
 @app.post("/api/leadership-summary", dependencies=[Depends(require_access_key)])
-@limiter.limit("10/hour")
+@limiter.limit("5/hour")
 def leadership_summary(request: Request, body: LeadershipSummaryRequest):
     SUPPORTED_MODULES = {3, 4, 5, 8}
     if body.module_id not in SUPPORTED_MODULES:
@@ -1888,7 +1888,7 @@ Intelligence Output:
 
 @app.post("/api/compare-markets",
           dependencies=[Depends(require_access_key)])
-@limiter.limit("5/hour")
+@limiter.limit("3/hour")
 async def compare_markets(request: Request,
                           body: CompareMarketsRequest):
     SUPPORTED_MODULES = {3, 4, 5, 8}
@@ -2051,7 +2051,7 @@ async def gap_analysis(request: Request, session_id: int = Query(...)):
 
 @app.get("/api/indications",
          dependencies=[Depends(require_access_key)])
-@limiter.limit("20/hour")
+@limiter.limit("10/hour")
 async def get_indications(
     request: Request,
     product: str = Query(...),

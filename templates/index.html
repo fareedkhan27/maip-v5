@@ -2444,13 +2444,20 @@ function exportBriefingPDF(moduleTitle, country, product,
 
 function CompareView({
   moduleId, moduleTitle, product, indication,
-  countryA, countryB, intelA, onClose
+  countryA, countryB, intelA, onClose,
+  compareCache, onCompareCache
 }) {
   const [data,    setData]    = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error,   setError]   = React.useState(null);
   const fields = MODULE_FIELD_LABELS[moduleId] || [];
   React.useEffect(() => {
+    const cmpKey=[moduleId,product||'',indication||'',countryA,countryB].join('|').toLowerCase();
+    if(compareCache&&compareCache[cmpKey]){
+      setData(compareCache[cmpKey]);setLoading(false);
+      console.log('[Compare] cache hit:',cmpKey);
+      return;
+    }
     let cancelled = false;
     async function load() {
       try {
@@ -2477,6 +2484,7 @@ function CompareView({
           setError(json.detail || `Server error ${res.status}`);
         } else if (json.success) {
           setData(json);
+          onCompareCache&&onCompareCache(prev=>({...prev,[cmpKey]:json}));
         } else {
           setError(json.detail || 'Comparison failed.');
         }
@@ -2538,7 +2546,7 @@ function CompareView({
   );
 }
 
-function LeadershipSummaryCard({moduleId,country,product,indication,intelligenceText}){
+function LeadershipSummaryCard({moduleId,country,product,indication,intelligenceText,summaryCache,onSummaryCache}){
   const [open,setOpen]=React.useState(false);
   const [loading,setLoading]=React.useState(false);
   const [summary,setSummary]=React.useState(null);
@@ -2546,6 +2554,7 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
   const [fetched,setFetched]=React.useState(false);
   const [compareCountry,setCompareCountry]=React.useState('');
   const [showCompare,setShowCompare]=React.useState(false);
+  const [compareCache,setCompareCache]=React.useState({});
   React.useEffect(()=>{
     if(intelligenceText&&intelligenceText.length>100&&!fetched){
       setOpen(true);
@@ -2554,11 +2563,20 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
   },[intelligenceText]);
   async function fetchSummary(){
     if(fetched){setOpen(o=>!o);return;}
+    const sKey=[moduleId,country,product,indication].join('|').toLowerCase();
+    if(summaryCache&&summaryCache[sKey]){
+      setSummary(summaryCache[sKey]);setFetched(true);setOpen(true);
+      console.log('[Summary] cache hit:',sKey);
+      return;
+    }
     setOpen(true);setLoading(true);setError(null);
     try{
       const res=await fetch('/api/leadership-summary',{method:'POST',headers:{'Content-Type':'application/json','x-access-key':sessionStorage.getItem('maip_access_key')||''},body:JSON.stringify({module_id:moduleId,module_name:MODULE_TITLES[moduleId]||'',country,product,indication,intelligence_text:intelligenceText})});
       const data=await res.json();
-      if(data.success){setSummary(data.summary);setFetched(true);}
+      if(data.success){
+        setSummary(data.summary);setFetched(true);
+        onSummaryCache&&onSummaryCache(prev=>({...prev,[sKey]:data.summary}));
+      }
       else{setError(data.error||'Summary unavailable.');}
     }catch(e){setError('Failed to generate summary. Intelligence output is available below.');}
     finally{setLoading(false);}
@@ -2628,7 +2646,9 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
       countryA:country,
       countryB:compareCountry.trim(),
       intelA:intelligenceText,
-      onClose:()=>setShowCompare(false)
+      onClose:()=>setShowCompare(false),
+      compareCache,
+      onCompareCache:setCompareCache
     })
   );
 }
@@ -2813,11 +2833,13 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
   const [country,setCountry]=useState('');
   const [indication,setIndication]=useState('');
   const [researchError,setResearchError]=useState(null);
+  const [researchCache,setResearchCache]=useState({});
   const [indicationCache,setIndicationCache]=React.useState({});
   const [coverageData,setCoverageData]=React.useState(null);
   const [coverageLoading,setCoverageLoading]=React.useState(false);
   const [coverageCache,setCoverageCache]=React.useState({});
   const [showCoverage,setShowCoverage]=React.useState(false);
+  const [summaryCache,setSummaryCache]=useState({});
 
   const subtypes=[
     {id:'competitive',label:'🏆 Competitive Landscape'},
@@ -2833,6 +2855,13 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
   ];
 
   const runResearch=async()=>{
+    const rKey=[subtype,product||'',country||'',indication||''].join('|').toLowerCase();
+    if(researchCache[rKey]){
+      const alreadyExists=state.researchCards.some(c=>c.subtype===researchCache[rKey].subtype&&c.product===researchCache[rKey].product&&c.country===researchCache[rKey].country&&c.indication===researchCache[rKey].indication);
+      if(!alreadyExists)dispatch({type:'ADD_RESEARCH',payload:researchCache[rKey]});
+      console.log('[Research] cache hit:',rKey);
+      return;
+    }
     setResearchError(null);
     dispatch({type:'SET',payload:{researchLoading:true}});
     try{
@@ -2842,7 +2871,9 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
         context:{product:product||null,country:country||null,indication:indication||null},
         model:modelMap[state.m2Model]||undefined
       })});
-      dispatch({type:'ADD_RESEARCH',payload:{...res,subtype,product,country,indication,timestamp:new Date().toLocaleTimeString()}});
+      const card={...res,subtype,product,country,indication,timestamp:new Date().toLocaleTimeString()};
+      dispatch({type:'ADD_RESEARCH',payload:card});
+      setResearchCache(prev=>({...prev,[rKey]:card}));
       onStatsRefresh&&onStatsRefresh();
     }catch(e){
       // Surface structured error in banner; do not create a raw error card
@@ -2950,7 +2981,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
           if(subtypeStr)setSubtype(subtypeStr);
         }
         return React.createElement('div',{key:i},
-        LEADERSHIP_MODULE_IDS.has(moduleId)&&card.result_text&&card.result_text.length>100&&React.createElement(LeadershipSummaryCard,{key:[moduleId,card.country||'',card.product||'',card.indication||''].join('|'),moduleId,country:card.country||'',product:card.product||'',indication:card.indication||'',intelligenceText:card.result_text}),
+        LEADERSHIP_MODULE_IDS.has(moduleId)&&card.result_text&&card.result_text.length>100&&React.createElement(LeadershipSummaryCard,{key:[moduleId,card.country||'',card.product||'',card.indication||''].join('|'),moduleId,country:card.country||'',product:card.product||'',indication:card.indication||'',intelligenceText:card.result_text,summaryCache,onSummaryCache:setSummaryCache}),
         React.createElement('div',{className:'intel-card',style:{borderTop:`3px solid ${confColors[card.confidence]||'var(--border)'}`}},
         React.createElement('div',{className:'intel-card-header'},
           React.createElement('span',{className:'intel-badge',style:{background:'var(--c-navy-800)',color:'#fff'}},card.subtype),
