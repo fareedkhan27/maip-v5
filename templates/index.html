@@ -403,6 +403,157 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
   opacity: 0.35;
   cursor: not-allowed;
 }
+/* ── Cross-Market Comparison ─────────────────── */
+.cmp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 1002;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+  backdrop-filter: blur(4px);
+}
+.cmp-panel {
+  background: #0f1117;
+  border: 1px solid rgba(79,110,247,0.3);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 1020px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  margin-bottom: 40px;
+}
+.cmp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 28px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(79,110,247,0.06);
+}
+.cmp-label {
+  margin: 0 0 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4f6ef7;
+}
+.cmp-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #eef0fa;
+}
+.cmp-market-bar {
+  display: grid;
+  grid-template-columns: 175px 1fr 1fr;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.cmp-market-head {
+  padding: 14px 20px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-align: center;
+  border-left: 1px solid rgba(255,255,255,0.06);
+}
+.cmp-a { color: #60a5fa; }
+.cmp-b { color: #a78bfa; }
+.cmp-body { padding: 0; }
+.cmp-row {
+  display: grid;
+  grid-template-columns: 175px 1fr 1fr;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: background 0.15s;
+}
+.cmp-row:hover { background: rgba(255,255,255,0.02); }
+.cmp-row-label {
+  padding: 14px 20px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #7b85c4;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 16px;
+}
+.cmp-cell {
+  padding: 12px 20px;
+  font-size: 0.83rem;
+  color: #dde2f5;
+  line-height: 1.55;
+  border-left: 1px solid rgba(255,255,255,0.05);
+}
+.cmp-cell-a { border-left-color: rgba(96,165,250,0.15); }
+.cmp-cell-b { border-left-color: rgba(167,139,250,0.15); }
+.cmp-signal-row {
+  display: grid;
+  grid-template-columns: 175px 1fr 1fr;
+  background: rgba(79,110,247,0.05);
+  border-top: 1px solid rgba(79,110,247,0.15);
+}
+.cmp-signal-cell {
+  padding: 16px 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #eef0fa;
+  line-height: 1.6;
+  border-left: 1px solid rgba(255,255,255,0.05);
+}
+.cmp-benchmark-note {
+  padding: 12px 20px;
+  font-size: 0.75rem;
+  color: #4a5080;
+  border-top: 1px solid rgba(255,255,255,0.04);
+  font-style: italic;
+}
+.ls-compare-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 14px;
+}
+.ls-compare-input {
+  flex: 1;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #dde2f5 !important;
+  font-size: 0.8rem;
+  -webkit-text-fill-color: #dde2f5;
+  transition: border-color 0.2s;
+}
+.ls-compare-input::placeholder { color: #4a5080; }
+.ls-compare-input:focus {
+  outline: none;
+  border-color: rgba(167,139,250,0.5);
+}
+.ls-compare-btn {
+  padding: 8px 14px;
+  background: rgba(167,139,250,0.1);
+  border: 1px solid rgba(167,139,250,0.3);
+  border-radius: 8px;
+  color: #c4b5fd !important;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.ls-compare-btn:hover:not(:disabled) {
+  background: rgba(167,139,250,0.2);
+  border-color: #a78bfa;
+  color: #ffffff !important;
+}
+.ls-compare-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 /* ── Gap Market Priority Score ───────────────── */
 .gap-nav-btn {
   background: none;
@@ -1834,12 +1985,110 @@ function exportBriefingPDF(moduleTitle, country, product,
   }
 }
 
+function CompareView({
+  moduleId, moduleTitle, product, indication,
+  countryA, countryB, intelA, onClose
+}) {
+  const [data,    setData]    = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error,   setError]   = React.useState(null);
+  const fields = MODULE_FIELD_LABELS[moduleId] || [];
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await fetch('/api/compare-markets', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-access-key': sessionStorage.getItem('maip_access_key') || ''
+          },
+          body: JSON.stringify({
+            module_id:    moduleId,
+            module_name:  moduleTitle,
+            product,
+            indication,
+            country_a:    countryA,
+            country_b:    countryB,
+            intel_text_a: intelA,
+            intel_text_b: '',
+          })
+        });
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          setError(json.detail || `Server error ${res.status}`);
+        } else if (json.success) {
+          setData(json);
+        } else {
+          setError(json.detail || 'Comparison failed.');
+        }
+      } catch(e) {
+        if (!cancelled) setError('Connection error: ' + e.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+  return React.createElement('div', {
+    className: 'cmp-overlay',
+    onClick: e => { if (e.target === e.currentTarget) onClose(); }
+  },
+    React.createElement('div', { className: 'cmp-panel' },
+      React.createElement('div', { className: 'cmp-header' },
+        React.createElement('div', null,
+          React.createElement('p', { className: 'cmp-label' }, 'CROSS-MARKET COMPARISON'),
+          React.createElement('h2', { className: 'cmp-title' }, moduleTitle)
+        ),
+        React.createElement('button', { className: 'gap-close', onClick: onClose }, '\u2715')
+      ),
+      React.createElement('div', { className: 'cmp-market-bar' },
+        React.createElement('div', { className: 'cmp-row-label' }),
+        React.createElement('div', { className: 'cmp-market-head cmp-a' }, countryA),
+        React.createElement('div', { className: 'cmp-market-head cmp-b' }, countryB + ' \u2746')
+      ),
+      loading && React.createElement('div', { className: 'gap-loading' },
+        `Comparing ${countryA} vs ${countryB}\u2026`),
+      error && React.createElement('div', { className: 'gap-error' }, `Error: ${error}`),
+      !loading && !error && data &&
+      React.createElement('div', { className: 'cmp-body' },
+        fields.map(([key, label]) => {
+          const cleanLabel = String(label)
+            .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+            .replace(/[\u{2600}-\u{27BF}]/gu, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+          return React.createElement('div', { className: 'cmp-row', key },
+            React.createElement('div', { className: 'cmp-row-label' }, cleanLabel),
+            React.createElement('div', { className: 'cmp-cell cmp-cell-a' }, data.summary_a?.[key] || '\u2014'),
+            React.createElement('div', { className: 'cmp-cell cmp-cell-b' }, data.summary_b?.[key] || '\u2014')
+          );
+        }),
+        React.createElement('div', { className: 'cmp-signal-row' },
+          React.createElement('div', { className: 'cmp-row-label' }, 'LEADERSHIP SIGNAL'),
+          React.createElement('div', { className: 'cmp-signal-cell cmp-cell-a' }, data.summary_a?.leadership_signal || '\u2014'),
+          React.createElement('div', { className: 'cmp-signal-cell cmp-cell-b' }, data.summary_b?.leadership_signal || '\u2014')
+        ),
+        React.createElement('div', { className: 'cmp-benchmark-note' },
+          '\u2746 ' + countryB +
+          ' analysis based on AI training knowledge [Benchmark]. ' +
+          'Run a dedicated research module for verified intelligence.'
+        )
+      )
+    )
+  );
+}
+
 function LeadershipSummaryCard({moduleId,country,product,indication,intelligenceText}){
   const [open,setOpen]=React.useState(false);
   const [loading,setLoading]=React.useState(false);
   const [summary,setSummary]=React.useState(null);
   const [error,setError]=React.useState(null);
   const [fetched,setFetched]=React.useState(false);
+  const [compareCountry,setCompareCountry]=React.useState('');
+  const [showCompare,setShowCompare]=React.useState(false);
   React.useEffect(()=>{
     if(intelligenceText&&intelligenceText.length>100&&!fetched){
       setOpen(true);
@@ -1881,6 +2130,25 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
           React.createElement('span',{className:'ls-signal-label'},'⚡ LEADERSHIP SIGNAL'),
           React.createElement('p',{className:'ls-signal-text'},summary.leadership_signal)
         ),
+        React.createElement('div',{className:'ls-compare-row'},
+          React.createElement('input',{
+            type:'text',
+            className:'ls-compare-input',
+            placeholder:'Compare with market\u2026',
+            value:compareCountry,
+            onChange:e=>setCompareCountry(e.target.value),
+            onKeyDown:e=>{
+              if(e.key==='Enter'&&compareCountry.trim()&&summary){
+                setShowCompare(true);
+              }
+            }
+          }),
+          React.createElement('button',{
+            className:'ls-compare-btn',
+            disabled:!compareCountry.trim()||!summary,
+            onClick:()=>{if(compareCountry.trim()&&summary)setShowCompare(true);}
+          },'\u21c4 Compare')
+        ),
         (()=>{
           const exportFields=MODULE_FIELD_LABELS[moduleId]||[];
           const exportTitle=MODULE_TITLES[moduleId]||'Leadership Summary';
@@ -1894,7 +2162,17 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
           );
         })()
       )
-    )
+    ),
+    showCompare&&compareCountry.trim()&&summary&&React.createElement(CompareView,{
+      moduleId,
+      moduleTitle:MODULE_TITLES[moduleId]||'Leadership Summary',
+      product,
+      indication,
+      countryA:country,
+      countryB:compareCountry.trim(),
+      intelA:intelligenceText,
+      onClose:()=>setShowCompare(false)
+    })
   );
 }
 

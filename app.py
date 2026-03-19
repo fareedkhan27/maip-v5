@@ -1786,14 +1786,8 @@ class LeadershipSummaryRequest(BaseModel):
     intelligence_text: str  # full text output from the module
 
 
-@app.post("/api/leadership-summary", dependencies=[Depends(require_access_key)])
-@limiter.limit("10/hour")
-def leadership_summary(request: Request, body: LeadershipSummaryRequest):
-    SUPPORTED_MODULES = {3, 4, 5, 8}
-    if body.module_id not in SUPPORTED_MODULES:
-        raise HTTPException(status_code=400, detail="Module not supported for leadership summary.")
-    MODULE_PROMPTS = {
-        3: """You are a pharmaceutical market access intelligence analyst.
+LEADERSHIP_MODULE_PROMPTS = {
+    3: """You are a pharmaceutical market access intelligence analyst.
 Extract a structured leadership summary from the competitive landscape intelligence below.
 Return ONLY a raw JSON object. No markdown, no code fences, no backticks, no preamble, no explanation. Start your response with { and end with }.
 JSON structure:
@@ -1805,7 +1799,7 @@ JSON structure:
   "access_gap": "string — where BMS leads or trails vs competitors",
   "leadership_signal": "string — ONE sentence, action language, so-what only. No hedging."
 }""",
-        4: """You are a pharmaceutical market access intelligence analyst.
+    4: """You are a pharmaceutical market access intelligence analyst.
 Extract a structured leadership summary from the timeline intelligence below.
 Return ONLY a raw JSON object. No markdown, no code fences, no backticks, no preamble, no explanation. Start your response with { and end with }.
 JSON structure:
@@ -1817,7 +1811,7 @@ JSON structure:
   "delay_risk": "string — known blockers or 'No blockers identified'",
   "leadership_signal": "string — ONE sentence. On track / at risk / action needed. No hedging."
 }""",
-        5: """You are a pharmaceutical market access intelligence analyst.
+    5: """You are a pharmaceutical market access intelligence analyst.
 Extract a structured leadership summary from the HTA and public sector intelligence below.
 Return ONLY a raw JSON object. No markdown, no code fences, no backticks, no preamble, no explanation. Start your response with { and end with }.
 JSON structure:
@@ -1829,7 +1823,7 @@ JSON structure:
   "risk_rating": "string — Low / Medium / High / Blocked with one-line reason",
   "leadership_signal": "string — ONE sentence. What this means for access strategy. No hedging."
 }""",
-        8: """You are a pharmaceutical market access intelligence analyst.
+    8: """You are a pharmaceutical market access intelligence analyst.
 Extract a structured leadership summary from the IRP risk intelligence below.
 Return ONLY a raw JSON object. No markdown, no code fences, no backticks, no preamble, no explanation. Start your response with { and end with }.
 JSON structure:
@@ -1841,8 +1835,27 @@ JSON structure:
   "risk_level": "string — Low / Medium / High / Critical with one-line reason",
   "leadership_signal": "string — ONE sentence. Recommended action or hold. No hedging."
 }"""
-    }
-    system_prompt = MODULE_PROMPTS[body.module_id]
+}
+
+
+class CompareMarketsRequest(BaseModel):
+    module_id:    int
+    module_name:  str
+    product:      str
+    indication:   str
+    country_a:    str
+    country_b:    str
+    intel_text_a: str
+    intel_text_b: str  # empty string is valid — Sonnet uses training knowledge
+
+
+@app.post("/api/leadership-summary", dependencies=[Depends(require_access_key)])
+@limiter.limit("10/hour")
+def leadership_summary(request: Request, body: LeadershipSummaryRequest):
+    SUPPORTED_MODULES = {3, 4, 5, 8}
+    if body.module_id not in SUPPORTED_MODULES:
+        raise HTTPException(status_code=400, detail="Module not supported for leadership summary.")
+    system_prompt = LEADERSHIP_MODULE_PROMPTS[body.module_id]
     user_message = f"""Country: {body.country}
 Product: {body.product}
 Indication: {body.indication}
@@ -1871,6 +1884,87 @@ Intelligence Output:
         return {"success": False, "error": "Summary parsing failed.", "module_id": body.module_id}
     except Exception as e:
         return {"success": False, "error": str(e), "module_id": body.module_id}
+
+
+@app.post("/api/compare-markets",
+          dependencies=[Depends(require_access_key)])
+@limiter.limit("5/hour")
+async def compare_markets(request: Request,
+                          body: CompareMarketsRequest):
+    SUPPORTED_MODULES = {3, 4, 5, 8}
+    if body.module_id not in SUPPORTED_MODULES:
+        raise HTTPException(status_code=400,
+            detail="Module not supported for comparison.")
+
+    def summarise(country: str, intel_text: str) -> dict:
+        """
+        Synchronous summary call — safe for asyncio.to_thread.
+        If intel_text is empty, Sonnet uses training knowledge.
+        System prompt instructs it to label estimates as [Benchmark].
+        """
+        base_prompt = LEADERSHIP_MODULE_PROMPTS.get(body.module_id)
+        if not base_prompt:
+            raise ValueError(
+                f"No prompt defined for module_id {body.module_id}")
+        if intel_text.strip():
+            context_note = (
+                "Use the intelligence output below as your primary source."
+            )
+        else:
+            context_note = (
+                "No local intelligence data is available for this market. "
+                "Use your training knowledge. Label all estimates as "
+                "[Benchmark] in the JSON values."
+            )
+        system_prompt = base_prompt + (
+            "\n\nIMPORTANT: " + context_note
+        )
+        user_msg = (
+            f"Country: {country}\n"
+            f"Product: {body.product}\n"
+            f"Indication: {body.indication}\n\n"
+            f"Intelligence Output:\n"
+            f"{intel_text[:6000] if intel_text.strip() else 'Not available.'}"
+        )
+        response = call_anthropic_with_retry(
+            client.messages.create,
+            model="claude-sonnet-4-6",
+            max_tokens=600,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_msg}]
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+        if raw.endswith("```"):
+            raw = raw.rsplit("```", 1)[0]
+        raw = raw.strip()
+        return json.loads(raw)
+
+    import asyncio
+    try:
+        summary_a, summary_b = await asyncio.gather(
+            asyncio.to_thread(summarise, body.country_a, body.intel_text_a),
+            asyncio.to_thread(summarise, body.country_b, body.intel_text_b),
+        )
+        return {
+            "success":   True,
+            "module_id": body.module_id,
+            "country_a": body.country_a,
+            "country_b": body.country_b,
+            "summary_a": summary_a,
+            "summary_b": summary_b,
+        }
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Comparison JSON parse failed: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Comparison failed: {str(e)}"
+        )
 
 
 @app.get("/api/gap-analysis", dependencies=[Depends(require_access_key)])
