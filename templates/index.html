@@ -620,6 +620,16 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
   font-style: italic;
   border-top: 1px solid rgba(255,255,255,0.04);
 }
+.cov-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1003;display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;backdrop-filter:blur(4px);}
+.cov-ov-panel{background:#0f1117;border:1px solid rgba(20,184,166,0.3);border-radius:16px;width:100%;max-width:860px;max-height:80vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.6);}
+.cov-ov-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(20,184,166,0.05);}
+.cov-ov-title{margin:0;font-size:0.75rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#94a3b8;}
+.cov-ov-score{font-size:2.6rem;font-weight:800;line-height:1;margin:8px 0 2px;}
+.cov-ov-score-label{font-size:0.78rem;color:#64748b;text-transform:uppercase;letter-spacing:.06em;}
+.cov-ov-gap-label{font-size:0.78rem;color:#475569;margin-top:2px;}
+.cov-ov-score-wrap{text-align:center;padding:16px 24px 8px;}
+.cov-btn{width:100%;margin-top:8px;justify-content:center;border-color:rgba(20,184,166,0.35);color:#14b8a6;}
+.cov-btn:disabled{opacity:0.4;cursor:not-allowed;}
 /* ── Indication Lookup ───────────────────────── */
 .ind-input-wrap {
   position: relative;
@@ -2716,104 +2726,75 @@ const STATUS_CONFIG = {
   Mixed:      { color:'#fb923c', bg:'rgba(251,146,60,0.1)',  border:'rgba(251,146,60,0.25)',  icon:'\u{1F536}' },
   Gap:        { color:'#4a5080', bg:'rgba(255,255,255,0.03)',border:'rgba(255,255,255,0.08)', icon:'\u2b1c' },
 };
-function CoveragePanel({product,country,sessionId,fdaIndications}){
-  const [data,    setData]    = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error,   setError]   = React.useState(null);
-  const [lastKey, setLastKey] = React.useState(null);
-  React.useEffect(()=>{
-    const key=[product,country].join('|');
-    if(!product||!country||!sessionId||!fdaIndications||fdaIndications.length===0){setData(null);return;}
-    if(key===lastKey&&data)return;
-    let cancelled=false;
-    setLoading(true);setError(null);
-    async function load(){
-      try{
-        const res=await fetch('/api/indication-coverage',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','x-access-key':sessionStorage.getItem('maip_access_key')||''},
-          body:JSON.stringify({product,country,session_id:sessionId,fda_indications:fdaIndications})
-        });
-        const json=await res.json();
-        if(cancelled)return;
-        if(!res.ok){const d=json.detail;setError(typeof d==='string'?d:d?JSON.stringify(d):`Error ${res.status}`);}
-        else if(json.success){setData(json);setLastKey(key);}
-        else{setError('Coverage analysis failed.');}
-      }catch(e){
-        if(!cancelled)setError('Connection error: '+e.message);
-      }finally{
-        if(!cancelled)setLoading(false);
-      }
-    }
-    load();
-    return()=>{cancelled=true;};
-  },[product,country,(fdaIndications||[]).join('|')]);
-  if(!fdaIndications||fdaIndications.length===0)return null;
-  if(!product||!country)return null;
-  return React.createElement('div',{className:'cov-panel'},
-    React.createElement('div',{className:'cov-header'},
-      React.createElement('div',{className:'cov-header-left'},
-        React.createElement('span',{className:'cov-icon'},'\U0001f3af'),
+function CoverageOverlay({data,product,country,onClose}){
+  if(!data)return null;
+  const sortOrder={Reimbursed:0,Planned:1,Mixed:2,Gap:3};
+  const statusIcon={Reimbursed:'\u2705',Planned:'\uD83D\uDFE1',Mixed:'\uD83D\uDD35',Gap:'\u2B1C'};
+  const scoreColor=data.coverage_pct>=50?'#34d399':data.coverage_pct>=25?'#fbbf24':'#f87171';
+  return React.createElement('div',{className:'cov-overlay',onClick:e=>{if(e.target===e.currentTarget)onClose();}},
+    React.createElement('div',{className:'cov-ov-panel'},
+      // Header
+      React.createElement('div',{className:'cov-ov-header'},
         React.createElement('div',null,
-          React.createElement('p',{className:'cov-label'},'INDICATION COVERAGE ANALYSIS'),
-          React.createElement('h3',{className:'cov-title'},product+'  \u00b7  '+country)
-        )
-      ),
-      !loading&&data&&React.createElement('div',{className:'cov-score-wrap'},
-        React.createElement('span',{className:'cov-score-num',style:{color:data.coverage_pct>=50?'#34d399':data.coverage_pct>=25?'#fbbf24':'#f87171'}},data.coverage_pct+'%'),
-        React.createElement('span',{className:'cov-score-label'},'covered')
-      )
-    ),
-    !loading&&data&&React.createElement('div',{className:'cov-tiles'},
-      [['Reimbursed',data.reimbursed,'#34d399'],['Planned',data.planned,'#fbbf24'],['Mixed',data.mixed,'#fb923c'],['Gap',data.gap,'#f87171']].map(([label,count,color])=>
-        React.createElement('div',{key:label,className:'cov-tile'},
-          React.createElement('span',{className:'cov-tile-count',style:{color}},count),
-          React.createElement('span',{className:'cov-tile-label',style:{color}},label)
-        )
-      )
-    ),
-    loading&&React.createElement('div',{className:'cov-loading'},'Analysing indication coverage\u2026'),
-    error&&React.createElement('div',{className:'cov-error'},error),
-    !loading&&data&&data.total>0&&React.createElement('div',{className:'cov-bar-wrap'},
-      React.createElement('div',{className:'cov-bar-track'},
-        ['Reimbursed','Planned','Mixed'].map(status=>{
-          const count=data[status.toLowerCase()]||0;
-          const pct=(count/data.total)*100;
-          const color=STATUS_CONFIG[status].color;
-          if(pct===0)return null;
-          return React.createElement('div',{key:status,className:'cov-bar-segment',style:{width:pct+'%',background:color},title:`${status}: ${count}`});
-        })
-      ),
-      React.createElement('span',{className:'cov-bar-label'},data.total+' indications assessed globally')
-    ),
-    !loading&&!error&&data&&data.matrix.length>0&&React.createElement('div',{className:'cov-table-wrap'},
-      React.createElement('table',{className:'cov-table'},
-        React.createElement('thead',null,
-          React.createElement('tr',null,
-            ['FDA / EMA Approved Indication','In Dataset As',country+' Status'].map(h=>React.createElement('th',{key:h},h))
-          )
+          React.createElement('p',{className:'cov-ov-title'},'\uD83D\uDCCA INDICATION COVERAGE \u00b7 '+product+' \u00b7 '+country)
         ),
-        React.createElement('tbody',null,
-          [...data.matrix].sort((a,b)=>{
-            const order={Reimbursed:0,Planned:1,Mixed:2,Gap:3};
-            return (order[a.country_status]||3)-(order[b.country_status]||3);
-          }).map((row,i)=>{
-            const cfg=STATUS_CONFIG[row.country_status]||STATUS_CONFIG.Gap;
-            return React.createElement('tr',{key:i,className:'cov-row'},
-              React.createElement('td',{className:'cov-td cov-td-fda'},row.fda_indication),
-              React.createElement('td',{className:'cov-td cov-td-ds'},row.dataset_match||React.createElement('span',{className:'cov-not-tracked'},'Not tracked')),
-              React.createElement('td',{className:'cov-td'},
-                React.createElement('span',{className:'cov-status-badge',style:{color:cfg.color,background:cfg.bg,border:'1px solid '+cfg.border}},cfg.icon+' '+row.country_status)
-              )
-            );
-          })
+        React.createElement('button',{className:'gap-close',onClick:onClose},'\u2715')
+      ),
+      // ROW 1 — Summary tiles
+      React.createElement('div',{className:'cov-tiles',style:{padding:'16px 24px 8px'}},
+        [['Reimbursed',data.reimbursed,'#34d399'],['Planned',data.planned,'#fbbf24'],['Mixed',data.mixed,'#fb923c'],['Gap',data.gap,'#f87171']].map(([label,count,color])=>
+          React.createElement('div',{key:label,className:'cov-tile'},
+            React.createElement('span',{className:'cov-tile-count',style:{color}},count),
+            React.createElement('span',{className:'cov-tile-label',style:{color}},label)
+          )
         )
+      ),
+      // ROW 2 — Coverage score
+      React.createElement('div',{className:'cov-ov-score-wrap'},
+        React.createElement('div',{className:'cov-ov-score',style:{color:scoreColor}},data.coverage_pct+'%'),
+        React.createElement('div',{className:'cov-ov-score-label'},'Global Indication Coverage'),
+        React.createElement('div',{className:'cov-ov-gap-label'},'Gap Opportunity: '+data.gap+' indication'+(data.gap===1?'':'s'))
+      ),
+      // Progress bar
+      data.total>0&&React.createElement('div',{className:'cov-bar-wrap',style:{padding:'0 24px 16px'}},
+        React.createElement('div',{className:'cov-bar-track'},
+          ['Reimbursed','Planned','Mixed'].map(status=>{
+            const count=data[status.toLowerCase()]||0;
+            const pct=(count/data.total)*100;
+            if(pct===0)return null;
+            return React.createElement('div',{key:status,className:'cov-bar-segment',style:{width:pct+'%',background:STATUS_CONFIG[status].color},title:`${status}: ${count}`});
+          })
+        ),
+        React.createElement('span',{className:'cov-bar-label'},data.total+' indications assessed globally')
+      ),
+      // ROW 3 — Indication table
+      data.matrix.length>0&&React.createElement('div',{className:'cov-table-wrap'},
+        React.createElement('table',{className:'cov-table'},
+          React.createElement('thead',null,
+            React.createElement('tr',null,
+              ['Indication','Global Status',country+' Status'].map(h=>React.createElement('th',{key:h},h))
+            )
+          ),
+          React.createElement('tbody',null,
+            [...data.matrix].sort((a,b)=>(sortOrder[a.country_status]||3)-(sortOrder[b.country_status]||3))
+            .map((row,i)=>{
+              const cfg=STATUS_CONFIG[row.country_status]||STATUS_CONFIG.Gap;
+              return React.createElement('tr',{key:i,style:{background:i%2===0?'rgba(255,255,255,0.02)':'transparent'}},
+                React.createElement('td',{className:'cov-td cov-td-fda'},row.fda_indication),
+                React.createElement('td',{className:'cov-td'},'\u2705 FDA/EMA'),
+                React.createElement('td',{className:'cov-td'},
+                  React.createElement('span',{className:'cov-status-badge',style:{color:cfg.color,background:cfg.bg,border:'1px solid '+cfg.border}},(statusIcon[row.country_status]||'\u2B1C')+' '+row.country_status)
+                )
+              );
+            })
+          )
+        )
+      ),
+      // Footer
+      React.createElement('div',{className:'cov-footer'},
+        (data.normalisation==='haiku'?'\u2746 AI normalisation applied':'\u2746 String similarity matching')+
+        ' \u00b7 FDA/EMA data from IndicationLookup cache \u00b7 '+product+' \u00b7 '+country
       )
-    ),
-    !loading&&data&&React.createElement('div',{className:'cov-footer'},
-      data.normalisation==='haiku'
-        ?'\u2746 Indication matching via AI normalisation \u00b7 FDA/EMA data from IndicationLookup cache'
-        :'\u2746 Indication matching via string similarity \u00b7 AI normalisation unavailable'
     )
   );
 }
@@ -2833,6 +2814,10 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
   const [indication,setIndication]=useState('');
   const [researchError,setResearchError]=useState(null);
   const [indicationCache,setIndicationCache]=React.useState({});
+  const [coverageData,setCoverageData]=React.useState(null);
+  const [coverageLoading,setCoverageLoading]=React.useState(false);
+  const [coverageCache,setCoverageCache]=React.useState({});
+  const [showCoverage,setShowCoverage]=React.useState(false);
 
   const subtypes=[
     {id:'competitive',label:'🏆 Competitive Landscape'},
@@ -2870,7 +2855,41 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
   const cv=state.profile?.countryValues||[];
   const confColors={High:'var(--c-green-500)',Medium:'var(--c-amber-500)',Low:'var(--c-red-500)'};
 
-  return React.createElement('div',{className:'mi-layout'},
+  const fdaIndications=(indicationCache[product]||[]).filter(i=>i.source==='FDA/EMA').map(i=>i.label);
+
+  // CHANGE 2 — Coverage fetch + session cache
+  React.useEffect(()=>{
+    if(!product||!country||!state.sessionId||fdaIndications.length===0)return;
+    const cacheKey=`${product}|${country}`;
+    if(coverageCache[cacheKey]){
+      console.log('[Coverage] cache hit:',cacheKey);
+      setCoverageData(coverageCache[cacheKey]);
+      return;
+    }
+    setCoverageLoading(true);
+    let cancelled=false;
+    async function load(){
+      try{
+        const res=await fetch('/api/indication-coverage',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-access-key':sessionStorage.getItem('maip_access_key')||''},
+          body:JSON.stringify({product,country,session_id:state.sessionId,fda_indications:fdaIndications})
+        });
+        const json=await res.json();
+        if(cancelled)return;
+        if(json.success){
+          setCoverageData(json);
+          setCoverageCache(prev=>({...prev,[cacheKey]:json}));
+        }
+      }catch(e){/* non-fatal — button stays disabled */}
+      finally{if(!cancelled)setCoverageLoading(false);}
+    }
+    load();
+    return()=>{cancelled=true;};
+  },[product,country,fdaIndications.join('|')]);
+
+  return React.createElement(React.Fragment,null,
+  React.createElement('div',{className:'mi-layout'},
     React.createElement('div',{className:'mi-sidebar'},
       React.createElement('h3',{style:{marginBottom:16}},'Research Module'),
       React.createElement('label',{className:'mi-label'},'Module'),
@@ -2896,11 +2915,17 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
         state.researchLoading?React.createElement('span',{className:'spinner'}):null,
         state.researchLoading?' Researching...':'\uD83D\uDD0D Run Research'
       ),
-      React.createElement(CoveragePanel,{
-        product,country,
-        sessionId:state.sessionId,
-        fdaIndications:(indicationCache[product]||[]).filter(i=>i.source==='FDA/EMA').map(i=>i.label)
-      })
+      React.createElement('button',{
+        className:'btn cov-btn',
+        onClick:()=>coverageData&&setShowCoverage(true),
+        disabled:fdaIndications.length===0||coverageLoading||!coverageData,
+        title:'View indication coverage gap analysis'
+      },
+        coverageLoading?'\u23f3 Loading coverage\u2026':
+        coverageData?'\uD83D\uDCCA Coverage \u2713':
+        fdaIndications.length===0?'\uD83D\uDCCA Coverage (fetch \u2728 first)':
+        '\uD83D\uDCCA Coverage\u2026'
+      )
     ),
     React.createElement('div',{className:'mi-content'},
       researchError&&(()=>{
@@ -2945,6 +2970,11 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
       )
     })
     )
+  ),
+  showCoverage&&coverageData&&React.createElement(CoverageOverlay,{
+    data:coverageData,product,country,
+    onClose:()=>setShowCoverage(false)
+  })
   );
 }
 
