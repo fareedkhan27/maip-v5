@@ -679,6 +679,16 @@ def generate_correction_suggestions(filter_spec: dict, profile: dict, schema: di
 # AI PROMPT BUILDERS
 # ─────────────────────────────────────────────
 
+def trim_stats_for_narrator(stats: dict) -> dict:
+    trimmed = {}
+    for k, v in stats.items():
+        if isinstance(v, dict) and len(v) > 8:
+            trimmed[k] = dict(list(v.items())[:8])
+        else:
+            trimmed[k] = v
+    return trimmed
+
+
 def build_intent_parser_prompt(profile: dict, schema: dict) -> str:
     col_listings = []
     for col_info in schema["columns"]:
@@ -832,7 +842,8 @@ Structure your response with these sections:
 ## Biosimilar/Generic Threats
 ## Key Differentiators
 ## Strategic Implications
-Label each claim: [Verified] [Likely] [Estimate]""",
+Label each claim: [Verified] [Likely] [Estimate]
+Start directly with the first section header. No preamble. No introduction. No concluding summary.""",
     "timeline": """You are a market access timeline intelligence analyst.
 Research typical timelines for reimbursement in the specified market.
 Structure your response with these sections:
@@ -842,7 +853,8 @@ Structure your response with these sections:
 ## Risk Factors
 ## Fast-Track Paths
 ## Overall Confidence: High/Medium/Low
-Include specific month ranges. Cite precedents.""",
+Include specific month ranges. Cite precedents.
+Start directly with the first section header. No preamble. No introduction. No concluding summary.""",
     "public_sector": """You are an HTA and public sector market access analyst.
 Research the HTA body and assessment process for the specified market.
 Structure your response with these sections:
@@ -853,7 +865,8 @@ Structure your response with these sections:
 ## Budget Impact Requirements
 ## Patient Access Pathway
 ## Recent Notable Decisions (last 24 months)
-Note data currency: [Current as of YYYY] or [Estimated]""",
+Note data currency: [Current as of YYYY] or [Estimated]
+Start directly with the first section header. No preamble. No introduction. No concluding summary.""",
     "patient_population": """You are a pharmaceutical epidemiology analyst.
 Research patient population data for the specified indication and market.
 Structure your response with these sections:
@@ -863,7 +876,8 @@ Structure your response with these sections:
 ## Treatment Rate
 ## Annual Incidence
 ## Data Sources and Years
-## Confidence: High/Medium/Low/Modelled""",
+## Confidence: High/Medium/Low/Modelled
+Start directly with the first section header. No preamble. No introduction. No concluding summary.""",
     "analog": """You are a market access analog intelligence analyst.
 Research precedent products for the specified context.
 Structure your response with these sections:
@@ -872,7 +886,9 @@ Structure your response with these sections:
 ## Time-to-Reimbursement Comparison
 ## Key Success Factors
 ## Lessons for Current Product
-Include company, indication, months to decision, outcome.""",
+Include company, indication, months to decision, outcome.
+Label each claim [Verified] [Likely] [Estimate]. If no source supports a claim, mark it [Estimate].
+Start directly with the first section header. No preamble. No introduction. No concluding summary.""",
     "irp_risk": """You are an international reference pricing analyst.
 Research IRP risks for the specified product and markets.
 Structure your response with these sections:
@@ -881,7 +897,9 @@ Structure your response with these sections:
 ## Recommended Launch Sequence
 ## High-Risk Combinations
 ## Mitigation Strategies (managed entry, outcomes-based)
-Flag any IRP framework changes in last 12 months.""",
+Flag any IRP framework changes in last 12 months.
+Label each claim [Verified] [Likely] [Estimate]. If no source supports a claim, mark it [Estimate].
+Start directly with the first section header. No preamble. No introduction. No concluding summary.""",
     "evidence_gap": """You are a health economics and outcomes research analyst.
 Research evidence requirements for the specified context.
 Structure your response with these sections:
@@ -890,7 +908,9 @@ Structure your response with these sections:
 ## Critical Gaps [Critical/Important/Nice-to-Have]
 ## RWE Requirements
 ## PICO Framework
-## Timeline to Address""",
+## Timeline to Address
+Label each claim [Verified] [Likely] [Estimate]. If no source supports a claim, mark it [Estimate].
+Start directly with the first section header. No preamble. No introduction. No concluding summary.""",
     "hospital_channel": """You are a hospital and institutional market access analyst.
 Research hospital channel access for the specified context.
 Structure your response with these sections:
@@ -899,7 +919,9 @@ Structure your response with these sections:
 ## KOL Landscape
 ## Institutional vs Retail Access
 ## Tender/Procurement Process
-## Channel Strategy Implications""",
+## Channel Strategy Implications
+Label each claim [Verified] [Likely] [Estimate]. If no source supports a claim, mark it [Estimate].
+Start directly with the first section header. No preamble. No introduction. No concluding summary.""",
     "payer_landscape": """You are a payer landscape intelligence analyst.
 Research the payer landscape for the specified market.
 Structure your response with these sections:
@@ -908,7 +930,9 @@ Structure your response with these sections:
 ## Coverage Criteria
 ## Managed Entry Agreement Precedents
 ## Patient Co-payment Structure
-## Budget Holder Priorities""",
+## Budget Holder Priorities
+Label each claim [Verified] [Likely] [Estimate]. If no source supports a claim, mark it [Estimate].
+Start directly with the first section header. No preamble. No introduction. No concluding summary.""",
 }
 
 
@@ -1003,7 +1027,7 @@ def call_with_tools(system: str, user_msg: str, model: str = SONNET, max_turns: 
         return "AI features unavailable — ANTHROPIC_API_KEY not set."
 
     messages = [{"role": "user", "content": user_msg}]
-    tools = [{"type": "web_search_20250305", "name": "web_search"}]
+    tools = [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}]
     response = None
 
     for turn in range(max_turns):
@@ -1424,7 +1448,7 @@ async def query(request: Request, body: QueryRequest):
             try:
                 intent_response = client.messages.create(
                     model=model_to_use,
-                    max_tokens=1000,
+                    max_tokens=600,
                     system=intent_prompt,
                     messages=[{"role": "user", "content": expanded}],
                 )
@@ -1488,7 +1512,7 @@ async def query(request: Request, body: QueryRequest):
 
                     narrator_input = f"Query: {body.query}\nExpanded: {expanded}\nFilters applied: {json.dumps(filters)}\nTotal results: 0\nNo records matched the filters.{avail_info}"
                 else:
-                    narrator_input = f"Query: {body.query}\nExpanded: {expanded}\nFilters applied: {json.dumps(filters)}\nStats: {json.dumps(stats, default=str)}"
+                    narrator_input = f"Query: {body.query}\nExpanded: {expanded}\nFilters applied: {json.dumps(filters)}\nStats: {json.dumps(trim_stats_for_narrator(stats), default=str)}"
 
                 narrator_response = client.messages.create(
                     model=model_to_use,
@@ -1588,7 +1612,7 @@ async def research(request: Request, body: ResearchRequest):
     system_prompt = RESEARCH_PROMPTS.get(body.subtype, RESEARCH_PROMPTS.get("competitive", "Provide a detailed analysis."))
 
     context_str = "\n".join(f"{k}: {v}" for k, v in body.context.items() if v)
-    user_msg = f"Research context:\n{context_str}\n\nProvide comprehensive intelligence for this market access scenario."
+    user_msg = f"Research context:\n{context_str}"
 
     model_to_use = body.model if body.model else SONNET
     _check_budget(5000)  # research calls consume more tokens
@@ -1847,6 +1871,7 @@ class CompareMarketsRequest(BaseModel):
     country_b:    str
     intel_text_a: str
     intel_text_b: str  # empty string is valid — Sonnet uses training knowledge
+    summary_a_cached: Optional[dict] = None
 
 
 @app.post("/api/leadership-summary", dependencies=[Depends(require_access_key)])
@@ -1860,7 +1885,7 @@ def leadership_summary(request: Request, body: LeadershipSummaryRequest):
 Product: {body.product}
 Indication: {body.indication}
 Intelligence Output:
-{body.intelligence_text[:8000]}"""
+{body.intelligence_text[:4000]}"""
     if not client:
         return {"success": False, "error": "AI unavailable.", "module_id": body.module_id}
     try:
@@ -1924,7 +1949,7 @@ async def compare_markets(request: Request,
             f"Product: {body.product}\n"
             f"Indication: {body.indication}\n\n"
             f"Intelligence Output:\n"
-            f"{intel_text[:6000] if intel_text.strip() else 'Not available.'}"
+            f"{intel_text[:4000] if intel_text.strip() else 'Not available.'}"
         )
         response = call_anthropic_with_retry(
             client.messages.create,
@@ -1943,10 +1968,15 @@ async def compare_markets(request: Request,
 
     import asyncio
     try:
-        summary_a, summary_b = await asyncio.gather(
-            asyncio.to_thread(summarise, body.country_a, body.intel_text_a),
-            asyncio.to_thread(summarise, body.country_b, body.intel_text_b),
-        )
+        if body.summary_a_cached:
+            summary_a = body.summary_a_cached
+            summary_b = await asyncio.to_thread(
+                summarise, body.country_b, body.intel_text_b)
+        else:
+            summary_a, summary_b = await asyncio.gather(
+                asyncio.to_thread(summarise, body.country_a, body.intel_text_a),
+                asyncio.to_thread(summarise, body.country_b, body.intel_text_b),
+            )
         return {
             "success":   True,
             "module_id": body.module_id,
@@ -2091,21 +2121,20 @@ async def get_indications(
         )
         user_msg = (
             f"List all currently FDA-approved and EMA-approved "
-            f"oncology indications for {product} (generic name "
-            f"if brand name given). Use web search to verify "
-            f"current label. Search globally. Do not filter by "
-            f"country. Return all FDA and EMA approved indications "
-            f"for {product} regardless of market. "
-            f"Return only the indication names as a JSON array."
+            f"indications for {product}. Use web search to verify "
+            f"current label. Include all markets globally. "
+            f"Return only the indication names as a JSON array. "
+            f"No markdown. No explanation."
         )
         response = call_anthropic_with_retry(
             client.messages.create,
             model="claude-haiku-4-5-20251001",
-            max_tokens=400,
+            max_tokens=250,
             system=system_prompt,
             tools=[{
                 "type": "web_search_20250305",
-                "name": "web_search"
+                "name": "web_search",
+                "max_uses": 2
             }],
             messages=[{"role": "user", "content": user_msg}]
         )
@@ -2117,7 +2146,6 @@ async def get_indications(
                 candidate = block.text.strip()
                 if candidate:
                     raw_text = candidate  # keep updating — last non-empty wins
-        print(f"[INDICATIONS L2] raw text block: {raw_text[:500]}", flush=True)
         if raw_text:
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[-1]
@@ -2128,7 +2156,6 @@ async def get_indications(
         arr_match = re.search(r'\[.*\]', raw_text, re.DOTALL)
         if arr_match:
             raw_text = arr_match.group()
-        print(f"[INDICATIONS L2] after strip: {raw_text[:500]}", flush=True)
         if raw_text:  # re-check after fence stripping
             parsed = json.loads(raw_text)
             if isinstance(parsed, list):
@@ -2136,9 +2163,7 @@ async def get_indications(
                     str(i).strip() for i in parsed
                     if str(i).strip()
                 ]
-        print(f"[INDICATIONS L2] parsed count: {len(ai_indications)}", flush=True)
     except Exception as e:
-        print(f"[INDICATIONS L2] EXCEPTION: {e}", flush=True)
         # AI enrichment failure is non-fatal —
         # dataset indications still returned
         ai_indications = []
@@ -2245,7 +2270,7 @@ async def indication_coverage(request: Request,
                 response = call_anthropic_with_retry(
                     client.messages.create,
                     model="claude-haiku-4-5-20251001",
-                    max_tokens=800,
+                    max_tokens=500,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_msg}]
                 )

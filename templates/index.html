@@ -2444,7 +2444,7 @@ function exportBriefingPDF(moduleTitle, country, product,
 
 function CompareView({
   moduleId, moduleTitle, product, indication,
-  countryA, countryB, intelA, onClose,
+  countryA, countryB, intelA, summaryACached, onClose,
   compareCache, onCompareCache
 }) {
   const [data,    setData]    = React.useState(null);
@@ -2476,6 +2476,7 @@ function CompareView({
             country_b:    countryB,
             intel_text_a: intelA,
             intel_text_b: '',
+            summary_a_cached: summaryACached || null,
           })
         });
         const json = await res.json();
@@ -2646,6 +2647,7 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
       countryA:country,
       countryB:compareCountry.trim(),
       intelA:intelligenceText,
+      summaryACached:summary,
       onClose:()=>setShowCompare(false),
       compareCache,
       onCompareCache:setCompareCache
