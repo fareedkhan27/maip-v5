@@ -2169,7 +2169,7 @@ async def get_indications(
 class CoverageRequest(BaseModel):
     product:         str
     country:         str
-    session_id:      str
+    session_id:      int
     fda_indications: list[str]  # from frontend cache
 
 
@@ -2182,7 +2182,7 @@ async def indication_coverage(request: Request,
         # ── Layer 1: Dataset cross-reference ─────────────
         dataset_map = {}
         try:
-            df, schema, profile, session = load_session(int(body.session_id))
+            df, schema, profile, session = load_session(body.session_id)
             df.columns = [c.strip() for c in df.columns]
             col_map = {c.lower(): c for c in df.columns}
             product_col = col_map.get("product")

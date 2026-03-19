@@ -2736,7 +2736,7 @@ function CoveragePanel({product,country,sessionId,fdaIndications}){
         });
         const json=await res.json();
         if(cancelled)return;
-        if(!res.ok){setError(json.detail||`Error ${res.status}`);}
+        if(!res.ok){const d=json.detail;setError(typeof d==='string'?d:d?JSON.stringify(d):`Error ${res.status}`);}
         else if(json.success){setData(json);setLastKey(key);}
         else{setError('Coverage analysis failed.');}
       }catch(e){
