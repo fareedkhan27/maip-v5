@@ -1756,7 +1756,12 @@ function exportBriefingPDF(moduleTitle, country, product,
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
       doc.setTextColor(123, 133, 196);
-      doc.text(String(label), margin, y);
+      const cleanLabel = String(label)
+        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+        .replace(/[\u{2600}-\u{27BF}]/gu, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      doc.text(cleanLabel, margin, y);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(221, 226, 245);
