@@ -389,6 +389,10 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
   text-align: center;
 }
 .gap-nav-btn:hover { background: rgba(255,255,255,0.08); }
+.gap-nav-btn-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 .gap-overlay {
   position: fixed;
   inset: 0;
@@ -1271,9 +1275,9 @@ function Sidebar({state,dispatch,onAbout,onGap}){
         React.createElement('span',{className:'nav-label'},m.label)
       )),
       React.createElement('button',{
-        className:'gap-nav-btn',
-        title:'Gap Market Priority Score',
-        onClick:()=>onGap&&onGap()
+        className:'gap-nav-btn'+((!state.sessionId)?' gap-nav-btn-disabled':''),
+        title:state.sessionId?'Gap Market Priority Score':'Load a dataset first',
+        onClick:()=>{ if(state.sessionId)onGap&&onGap(); }
       },'🎯'),
       React.createElement('button',{className:'nav-item',onClick:()=>onAbout&&onAbout(),style:{marginTop:'auto'}},
         React.createElement('span',{className:'nav-icon'},'ℹ️'),
@@ -1915,7 +1919,11 @@ function GapAnalysisView({ sessionId, onClose }) {
   const [filter,  setFilter]  = React.useState('All');
   React.useEffect(() => {
     async function load() {
-      console.log('GAP sessionId:', sessionId);
+      if (!sessionId) {
+        setError('No dataset loaded. Please upload a file first.');
+        setLoading(false);
+        return;
+      }
       try {
         const res = await fetch(
           `/api/gap-analysis?session_id=${sessionId}`, {
@@ -1927,7 +1935,7 @@ function GapAnalysisView({ sessionId, onClose }) {
         if (json.success) setData(json);
         else setError(json.detail || 'Failed to load gap analysis.');
       } catch(e) {
-        setError('Connection error: ' + e.message);
+        setError('Connection error. Please ensure a dataset is loaded.');
       } finally {
         setLoading(false);
       }
