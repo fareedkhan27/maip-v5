@@ -403,6 +403,71 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
   opacity: 0.35;
   cursor: not-allowed;
 }
+/* ── Recommendation Engine ───────────────────── */
+.rec-bar {
+  margin-top: 10px;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.rec-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7b85c4;
+  white-space: nowrap;
+  padding-top: 10px;
+  flex-shrink: 0;
+}
+.rec-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.rec-pill {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(79,110,247,0.06);
+  border: 1px solid rgba(79,110,247,0.18);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  width: 100%;
+}
+.rec-pill:hover {
+  background: rgba(79,110,247,0.14);
+  border-color: rgba(79,110,247,0.4);
+}
+.rec-pill-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.rec-pill-text {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #a0b0ff;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.rec-pill-reason {
+  font-size: 0.78rem;
+  color: #7b85c4;
+  line-height: 1.4;
+}
+.rec-pill:hover .rec-pill-text   { color: #ffffff; }
+.rec-pill:hover .rec-pill-reason { color: #a0b0ff; }
 /* ── Cross-Market Comparison ─────────────────── */
 .cmp-overlay {
   position: fixed;
@@ -1834,7 +1899,71 @@ function DashboardModule({state,dispatch}){
 
 // ─── Leadership Summary Card ───
 const LEADERSHIP_MODULE_IDS=new Set([3,4,5,8]);
+
+const MODULE_META = {
+  3:  { label: 'Competitive Landscape', icon: '🥊' },
+  4:  { label: 'Timeline Intelligence', icon: '⏱'  },
+  5:  { label: 'HTA & Public Sector',   icon: '🏛'  },
+  6:  { label: 'Patient Population',    icon: '👥'  },
+  7:  { label: 'Analog Intelligence',   icon: '🔄'  },
+  8:  { label: 'IRP Risk Analysis',     icon: '💶'  },
+  9:  { label: 'Evidence Gap Analysis', icon: '🔬'  },
+  10: { label: 'Hospital & Channel',    icon: '🏥'  },
+  11: { label: 'Payer Landscape',       icon: '💼'  },
+};
+
+function getRecommendations(currentModuleId, resultText) {
+  if (!resultText || resultText.length < 100) return [];
+  if (!currentModuleId) return [];
+  const t = resultText.toLowerCase();
+  const recs = [];
+  const rules = [
+    { from:3, detect:['price','pricing','cost','annual cost','affordab','cheaper','expensive','budget'], suggest:8, reason:'Pricing dynamics detected — assess IRP cascade risk' },
+    { from:3, detect:['not reimbursed','restricted','limited access','no reimbursement','planned','hta','formulary'], suggest:5, reason:'Access gap detected — review HTA submission pathway' },
+    { from:5, detect:['delay','pending','under review','months','years','timeline','slow','backlog','queue'], suggest:4, reason:'HTA delays flagged — map timeline to next milestone' },
+    { from:5, detect:['budget','cost-effective','economic','qaly','budget impact','payer','insurance','heor'], suggest:11, reason:'Budget evidence required — analyse payer landscape' },
+    { from:8, detect:['reference','basket','cascade','lower price','price erosion','below basket','irp'], suggest:3, reason:'Reference pricing risk — benchmark competitive positioning' },
+    { from:8, detect:['launch','sequence','sequencing','market entry','delay launch','launch order'], suggest:4, reason:'Launch sequence risk — align timeline intelligence' },
+    { from:4, detect:['evidence','data gap','clinical data','real-world','rwe','lacking evidence','dossier'], suggest:9, reason:'Evidence gaps detected — assess submission readiness' },
+    { from:4, detect:['submission','dossier','file','apply','application','hta body','hta process'], suggest:5, reason:'Submission pathway active — review HTA requirements' },
+    { from:11, detect:['hospital','formulary','channel','tender','procurement','oncology centre','cancer centre'], suggest:10, reason:'Channel dynamics identified — analyse hospital access' },
+    { from:9, detect:['comparator','competitor','head-to-head','versus','alternative therapy','standard of care'], suggest:3, reason:'Comparator gap found — assess competitive positioning' },
+  ];
+  for (const rule of rules) {
+    if (rule.from !== currentModuleId) continue;
+    if (recs.length >= 2) break;
+    if (recs.some(r => r.moduleId === rule.suggest)) continue;
+    if (rule.detect.some(kw => t.includes(kw))) {
+      recs.push({ moduleId: rule.suggest, reason: rule.reason });
+    }
+  }
+  return recs.slice(0, 2);
+}
+
+function RecommendationBar({ recommendations, onSelect }) {
+  if (!recommendations || recommendations.length === 0) return null;
+  return React.createElement('div', { className: 'rec-bar' },
+    React.createElement('span', { className: 'rec-label' }, '💡 Recommended next'),
+    React.createElement('div', { className: 'rec-pills' },
+      recommendations.map(rec => {
+        const meta = MODULE_META[rec.moduleId];
+        if (!meta) return null;
+        return React.createElement('button', {
+          key: rec.moduleId,
+          className: 'rec-pill',
+          title: rec.reason,
+          onClick: () => onSelect(rec.moduleId)
+        },
+          React.createElement('span', { className: 'rec-pill-icon' }, meta.icon),
+          React.createElement('span', { className: 'rec-pill-text' }, meta.label),
+          React.createElement('span', { className: 'rec-pill-reason' }, rec.reason)
+        );
+      })
+    )
+  );
+}
 const SUBTYPE_TO_MODULE_ID={competitive:3,timeline:4,public_sector:5,irp_risk:8};
+const MODULE_ID_TO_SUBTYPE={3:'competitive',4:'timeline',5:'public_sector',6:'patient_population',7:'analog',8:'irp_risk',9:'evidence_gap',10:'hospital_channel',11:'payer_landscape'};
 const MODULE_FIELD_LABELS={
   3:[['key_competitors','🥊 Key Competitors'],['their_access_status','✅ Their Access Status'],['biosimilar_threat','⚡ Biosimilar Threat'],['our_position','🎯 Our Position'],['access_gap','📊 Access Gap']],
   4:[['current_milestone','📅 Current Milestone'],['next_milestone','🏁 Next Milestone'],['estimated_timeline','⏳ Estimated Timeline'],['regional_benchmark','📐 Regional Benchmark'],['delay_risk','🚧 Delay Risk']],
@@ -2267,6 +2396,11 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
       ),
       state.researchCards.map((card,i)=>{
         const moduleId=SUBTYPE_TO_MODULE_ID[card.subtype]||null;
+        const cardRecs=getRecommendations(moduleId,card.result_text);
+        function handleRecommendationSelect(recModuleId){
+          const subtypeStr=MODULE_ID_TO_SUBTYPE[recModuleId];
+          if(subtypeStr)setSubtype(subtypeStr);
+        }
         return React.createElement('div',{key:i},
         LEADERSHIP_MODULE_IDS.has(moduleId)&&card.result_text&&card.result_text.length>100&&React.createElement(LeadershipSummaryCard,{key:[moduleId,card.country||'',card.product||'',card.indication||''].join('|'),moduleId,country:card.country||'',product:card.product||'',indication:card.indication||'',intelligenceText:card.result_text}),
         React.createElement('div',{className:'intel-card',style:{borderTop:`3px solid ${confColors[card.confidence]||'var(--border)'}`}},
@@ -2283,7 +2417,9 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
           React.createElement('button',{className:'btn btn-sm btn-secondary',onClick:()=>{navigator.clipboard.writeText(card.result_text)}},'📋 Copy'),
           React.createElement('button',{className:'btn btn-sm btn-secondary',onClick:()=>dispatch({type:'REMOVE_RESEARCH',index:i})},'🗑 Remove')
         )
-      ))
+      ),
+        React.createElement(RecommendationBar,{recommendations:cardRecs,onSelect:handleRecommendationSelect})
+      )
     })
     )
   );
