@@ -468,6 +468,158 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 }
 .rec-pill:hover .rec-pill-text   { color: #ffffff; }
 .rec-pill:hover .rec-pill-reason { color: #a0b0ff; }
+/* ── Indication Coverage Panel ───────────────── */
+.cov-panel {
+  margin-top: 16px;
+  background: #0d1020;
+  border: 1px solid rgba(79,110,247,0.2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.cov-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: rgba(79,110,247,0.07);
+  border-bottom: 1px solid rgba(79,110,247,0.15);
+}
+.cov-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cov-icon { font-size: 1.1rem; }
+.cov-label {
+  margin: 0 0 2px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #4f6ef7;
+}
+.cov-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #dde2f5;
+}
+.cov-score-wrap { text-align: right; }
+.cov-score-num {
+  display: block;
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.cov-score-label {
+  font-size: 0.68rem;
+  color: #4a5080;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cov-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.cov-tile {
+  padding: 12px 8px;
+  text-align: center;
+  border-right: 1px solid rgba(255,255,255,0.05);
+}
+.cov-tile:last-child { border-right: none; }
+.cov-tile-count {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.cov-tile-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cov-loading {
+  padding: 20px;
+  text-align: center;
+  font-size: 0.82rem;
+  color: #4a5080;
+}
+.cov-error {
+  padding: 14px 18px;
+  font-size: 0.82rem;
+  color: #f87171;
+}
+.cov-bar-wrap {
+  padding: 12px 18px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.cov-bar-track {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.06);
+  margin-bottom: 6px;
+}
+.cov-bar-segment {
+  height: 100%;
+  transition: width 0.6s ease;
+}
+.cov-bar-label {
+  font-size: 0.72rem;
+  color: #4a5080;
+}
+.cov-table-wrap { overflow-x: auto; }
+.cov-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.81rem;
+}
+.cov-table thead tr {
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.02);
+}
+.cov-table th {
+  padding: 9px 16px;
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #4a5080;
+  white-space: nowrap;
+}
+.cov-row {
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+.cov-row:hover { background: rgba(255,255,255,0.02); }
+.cov-td { padding: 10px 16px; vertical-align: middle; }
+.cov-td-fda { color: #dde2f5; font-weight: 500; }
+.cov-td-ds { color: #7b85c4; font-size: 0.78rem; }
+.cov-not-tracked {
+  color: #4a5080;
+  font-style: italic;
+  font-size: 0.76rem;
+}
+.cov-status-badge {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.cov-footer {
+  padding: 8px 18px;
+  font-size: 0.7rem;
+  color: #4a5080;
+  font-style: italic;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
 /* ── Indication Lookup ───────────────────────── */
 .ind-input-wrap {
   position: relative;
@@ -2472,12 +2624,11 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
 }
 
 // ─── Indication Lookup ───
-function IndicationLookup({product,sessionId,currentValue,onSelect}){
+function IndicationLookup({product,sessionId,currentValue,onSelect,cache,onCache}){
   const [open,    setOpen]    = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [results, setResults] = React.useState([]);
   const [error,   setError]   = React.useState(null);
-  const [cache,   setCache]   = React.useState({});
   const [filter,  setFilter]  = React.useState('All');
   async function fetchIndications(){
     if(!product||!sessionId)return;
@@ -2496,8 +2647,9 @@ function IndicationLookup({product,sessionId,currentValue,onSelect}){
       if(!res.ok){
         setError(data.detail||`Error ${res.status}`);setResults([]);
       }else if(data.success){
-        setResults(data.indications||[]);
-        setCache(prev=>({...prev,[product]:data.indications||[]}));
+        const inds=data.indications||[];
+        setResults(inds);
+        onCache(prev=>({...prev,[product]:inds}));
       }else{
         setError('Could not retrieve indications.');setResults([]);
       }
@@ -2557,6 +2709,115 @@ function IndicationLookup({product,sessionId,currentValue,onSelect}){
   );
 }
 
+// ─── Indication Coverage Panel ───
+const STATUS_CONFIG = {
+  Reimbursed: { color:'#34d399', bg:'rgba(52,211,153,0.1)',  border:'rgba(52,211,153,0.25)',  icon:'\u2705' },
+  Planned:    { color:'#fbbf24', bg:'rgba(251,191,36,0.1)',  border:'rgba(251,191,36,0.25)',  icon:'\u{1F7E1}' },
+  Mixed:      { color:'#fb923c', bg:'rgba(251,146,60,0.1)',  border:'rgba(251,146,60,0.25)',  icon:'\u{1F536}' },
+  Gap:        { color:'#4a5080', bg:'rgba(255,255,255,0.03)',border:'rgba(255,255,255,0.08)', icon:'\u2b1c' },
+};
+function CoveragePanel({product,country,sessionId,fdaIndications}){
+  const [data,    setData]    = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error,   setError]   = React.useState(null);
+  const [lastKey, setLastKey] = React.useState(null);
+  React.useEffect(()=>{
+    const key=[product,country].join('|');
+    if(!product||!country||!sessionId||!fdaIndications||fdaIndications.length===0){setData(null);return;}
+    if(key===lastKey&&data)return;
+    let cancelled=false;
+    setLoading(true);setError(null);
+    async function load(){
+      try{
+        const res=await fetch('/api/indication-coverage',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-access-key':sessionStorage.getItem('maip_access_key')||''},
+          body:JSON.stringify({product,country,session_id:sessionId,fda_indications:fdaIndications})
+        });
+        const json=await res.json();
+        if(cancelled)return;
+        if(!res.ok){setError(json.detail||`Error ${res.status}`);}
+        else if(json.success){setData(json);setLastKey(key);}
+        else{setError('Coverage analysis failed.');}
+      }catch(e){
+        if(!cancelled)setError('Connection error: '+e.message);
+      }finally{
+        if(!cancelled)setLoading(false);
+      }
+    }
+    load();
+    return()=>{cancelled=true;};
+  },[product,country,fdaIndications]);
+  if(!fdaIndications||fdaIndications.length===0)return null;
+  if(!product||!country)return null;
+  return React.createElement('div',{className:'cov-panel'},
+    React.createElement('div',{className:'cov-header'},
+      React.createElement('div',{className:'cov-header-left'},
+        React.createElement('span',{className:'cov-icon'},'\U0001f3af'),
+        React.createElement('div',null,
+          React.createElement('p',{className:'cov-label'},'INDICATION COVERAGE ANALYSIS'),
+          React.createElement('h3',{className:'cov-title'},product+'  \u00b7  '+country)
+        )
+      ),
+      !loading&&data&&React.createElement('div',{className:'cov-score-wrap'},
+        React.createElement('span',{className:'cov-score-num',style:{color:data.coverage_pct>=50?'#34d399':data.coverage_pct>=25?'#fbbf24':'#f87171'}},data.coverage_pct+'%'),
+        React.createElement('span',{className:'cov-score-label'},'covered')
+      )
+    ),
+    !loading&&data&&React.createElement('div',{className:'cov-tiles'},
+      [['Reimbursed',data.reimbursed,'#34d399'],['Planned',data.planned,'#fbbf24'],['Mixed',data.mixed,'#fb923c'],['Gap',data.gap,'#f87171']].map(([label,count,color])=>
+        React.createElement('div',{key:label,className:'cov-tile'},
+          React.createElement('span',{className:'cov-tile-count',style:{color}},count),
+          React.createElement('span',{className:'cov-tile-label',style:{color}},label)
+        )
+      )
+    ),
+    loading&&React.createElement('div',{className:'cov-loading'},'Analysing indication coverage\u2026'),
+    error&&React.createElement('div',{className:'cov-error'},error),
+    !loading&&data&&data.total>0&&React.createElement('div',{className:'cov-bar-wrap'},
+      React.createElement('div',{className:'cov-bar-track'},
+        ['Reimbursed','Planned','Mixed'].map(status=>{
+          const count=data[status.toLowerCase()]||0;
+          const pct=(count/data.total)*100;
+          const color=STATUS_CONFIG[status].color;
+          if(pct===0)return null;
+          return React.createElement('div',{key:status,className:'cov-bar-segment',style:{width:pct+'%',background:color},title:`${status}: ${count}`});
+        })
+      ),
+      React.createElement('span',{className:'cov-bar-label'},data.total+' indications assessed globally')
+    ),
+    !loading&&!error&&data&&data.matrix.length>0&&React.createElement('div',{className:'cov-table-wrap'},
+      React.createElement('table',{className:'cov-table'},
+        React.createElement('thead',null,
+          React.createElement('tr',null,
+            ['FDA / EMA Approved Indication','In Dataset As',country+' Status'].map(h=>React.createElement('th',{key:h},h))
+          )
+        ),
+        React.createElement('tbody',null,
+          [...data.matrix].sort((a,b)=>{
+            const order={Reimbursed:0,Planned:1,Mixed:2,Gap:3};
+            return (order[a.country_status]||3)-(order[b.country_status]||3);
+          }).map((row,i)=>{
+            const cfg=STATUS_CONFIG[row.country_status]||STATUS_CONFIG.Gap;
+            return React.createElement('tr',{key:i,className:'cov-row'},
+              React.createElement('td',{className:'cov-td cov-td-fda'},row.fda_indication),
+              React.createElement('td',{className:'cov-td cov-td-ds'},row.dataset_match||React.createElement('span',{className:'cov-not-tracked'},'Not tracked')),
+              React.createElement('td',{className:'cov-td'},
+                React.createElement('span',{className:'cov-status-badge',style:{color:cfg.color,background:cfg.bg,border:'1px solid '+cfg.border}},cfg.icon+' '+row.country_status)
+              )
+            );
+          })
+        )
+      )
+    ),
+    !loading&&data&&React.createElement('div',{className:'cov-footer'},
+      data.normalisation==='haiku'
+        ?'\u2746 Indication matching via AI normalisation \u00b7 FDA/EMA data from IndicationLookup cache'
+        :'\u2746 Indication matching via string similarity \u00b7 AI normalisation unavailable'
+    )
+  );
+}
+
 // ─── Market Intelligence Module ───
 function getResearchErrorDisplay(errorData){
   if(!errorData)return{message:'An unexpected error occurred.',showRetry:false};
@@ -2571,6 +2832,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
   const [country,setCountry]=useState('');
   const [indication,setIndication]=useState('');
   const [researchError,setResearchError]=useState(null);
+  const [indicationCache,setIndicationCache]=React.useState({});
 
   const subtypes=[
     {id:'competitive',label:'🏆 Competitive Landscape'},
@@ -2628,12 +2890,17 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
       React.createElement('label',{className:'mi-label'},'Indication'),
       React.createElement('div',{className:'ind-input-wrap'},
         React.createElement('input',{className:'mi-select ind-input-padded',placeholder:'Type or click \u2728 to fetch',value:indication,onChange:e=>setIndication(e.target.value)}),
-        React.createElement(IndicationLookup,{product,sessionId:state.sessionId,currentValue:indication,onSelect:value=>setIndication(value)})
+        React.createElement(IndicationLookup,{product,sessionId:state.sessionId,currentValue:indication,onSelect:value=>setIndication(value),cache:indicationCache,onCache:setIndicationCache})
       ),
       React.createElement('button',{className:'btn btn-primary',style:{width:'100%',marginTop:16,justifyContent:'center'},onClick:runResearch,disabled:state.researchLoading},
         state.researchLoading?React.createElement('span',{className:'spinner'}):null,
-        state.researchLoading?' Researching...':'🔍 Run Research'
-      )
+        state.researchLoading?' Researching...':'\uD83D\uDD0D Run Research'
+      ),
+      React.createElement(CoveragePanel,{
+        product,country,
+        sessionId:state.sessionId,
+        fdaIndications:(indicationCache[product]||[]).filter(i=>i.source==='FDA/EMA').map(i=>i.label)
+      })
     ),
     React.createElement('div',{className:'mi-content'},
       researchError&&(()=>{

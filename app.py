@@ -2153,6 +2153,169 @@ async def get_indications(
     }
 
 
+class CoverageRequest(BaseModel):
+    product:         str
+    country:         str
+    session_id:      str
+    fda_indications: list[str]  # from frontend cache
+
+
+@app.post("/api/indication-coverage",
+          dependencies=[Depends(require_access_key)])
+@limiter.limit("15/hour")
+async def indication_coverage(request: Request,
+                               body: CoverageRequest):
+    try:
+        # ── Layer 1: Dataset cross-reference ─────────────
+        dataset_map = {}
+        try:
+            df, schema, profile, session = load_session(int(body.session_id))
+            df.columns = [c.strip() for c in df.columns]
+            col_map = {c.lower(): c for c in df.columns}
+            product_col = col_map.get("product")
+            country_col = col_map.get("country")
+            ind_col     = col_map.get("indication details")
+            status_col  = col_map.get("status")
+            if all([product_col, country_col, ind_col, status_col]):
+                mask = (
+                    (df[product_col].str.strip().str.lower()
+                     == body.product.strip().lower()) &
+                    (df[country_col].str.strip().str.lower()
+                     == body.country.strip().lower())
+                )
+                filtered = df[mask]
+                for ind, grp in filtered.groupby(ind_col):
+                    ind_str = str(ind).strip()
+                    if not ind_str:
+                        continue
+                    statuses = grp[status_col].dropna() \
+                                              .str.strip() \
+                                              .unique() \
+                                              .tolist()
+                    if len(statuses) == 0:
+                        continue
+                    elif "Reimbursed" in statuses and "Planned" in statuses:
+                        dataset_map[ind_str] = "Mixed"
+                    elif "Reimbursed" in statuses:
+                        dataset_map[ind_str] = "Reimbursed"
+                    else:
+                        dataset_map[ind_str] = "Planned"
+        except Exception:
+            dataset_map = {}
+
+        # ── Layer 2: Haiku normalisation ──────────────────
+        matches = []
+        if body.fda_indications and dataset_map:
+            try:
+                fda_list = body.fda_indications[:15]
+                ds_list  = list(dataset_map.keys())[:20]
+                system_prompt = (
+                    "You are a pharmaceutical nomenclature "
+                    "specialist. Match indication names across "
+                    "two lists. Same indication = same disease "
+                    "regardless of abbreviation or phrasing. "
+                    "Return ONLY a valid JSON array. "
+                    "No markdown, no code fences, no preamble. "
+                    "Start with [ and end with ]. "
+                    "Each element: "
+                    "{\"fda\": \"<fda name>\", "
+                    "\"match\": \"<dataset name or null>\"}"
+                )
+                user_msg = (
+                    f"FDA/EMA list: {json.dumps(fda_list)}\n"
+                    f"Dataset list: {json.dumps(ds_list)}\n\n"
+                    "For each FDA indication, find the best "
+                    "matching dataset indication. If no match "
+                    "exists, set match to null. "
+                    "Each FDA indication appears exactly once."
+                )
+                response = call_anthropic_with_retry(
+                    client.messages.create,
+                    model="claude-haiku-4-5-20251001",
+                    max_tokens=800,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_msg}]
+                )
+                raw = response.content[0].text.strip()
+                if raw.startswith("```"):
+                    raw = raw.split("\n", 1)[-1]
+                if raw.endswith("```"):
+                    raw = raw.rsplit("```", 1)[0]
+                raw = raw.strip()
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    matches = parsed
+            except Exception:
+                matches = []
+
+        # ── Fallback: substring matching ──────────────────
+        if not matches and body.fda_indications:
+            for fda_ind in body.fda_indications[:15]:
+                best_match = None
+                fda_lower  = fda_ind.lower().strip()
+                for ds_ind in dataset_map.keys():
+                    ds_lower = ds_ind.lower().strip()
+                    if (fda_lower in ds_lower
+                            or ds_lower in fda_lower
+                            or fda_lower[:4] == ds_lower[:4]):
+                        best_match = ds_ind
+                        break
+                matches.append({"fda": fda_ind, "match": best_match})
+
+        # ── Layer 3: Build coverage matrix ────────────────
+        matrix     = []
+        reimbursed = 0
+        planned    = 0
+        mixed      = 0
+        gap        = 0
+        for item in matches:
+            fda_name  = item.get("fda", "")
+            ds_match  = item.get("match")
+            ds_status = dataset_map.get(ds_match) if ds_match else None
+            if ds_status == "Reimbursed":
+                status_label = "Reimbursed"
+                reimbursed  += 1
+            elif ds_status == "Planned":
+                status_label = "Planned"
+                planned     += 1
+            elif ds_status == "Mixed":
+                status_label = "Mixed"
+                mixed       += 1
+            else:
+                status_label = "Gap"
+                gap         += 1
+            matrix.append({
+                "fda_indication": fda_name,
+                "dataset_match":  ds_match,
+                "country_status": status_label,
+            })
+        total        = len(matrix)
+        covered      = reimbursed + mixed
+        coverage_pct = round(
+            (covered / total * 100) if total > 0 else 0, 1
+        )
+        return {
+            "success":       True,
+            "product":       body.product,
+            "country":       body.country,
+            "matrix":        matrix,
+            "total":         total,
+            "reimbursed":    reimbursed,
+            "planned":       planned,
+            "mixed":         mixed,
+            "gap":           gap,
+            "coverage_pct":  coverage_pct,
+            "normalisation": "haiku" if matches and
+                             body.fda_indications and
+                             dataset_map else "fallback"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Coverage analysis failed: {str(e)}"
+        )
+
+
 class AnnotateRequest(BaseModel):
     session_id: int
     row_key: str
