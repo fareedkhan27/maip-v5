@@ -2124,6 +2124,10 @@ async def get_indications(
             if raw_text.endswith("```"):
                 raw_text = raw_text.rsplit("```", 1)[0]
             raw_text = raw_text.strip()
+        # Extract embedded JSON array if Haiku prepended prose preamble
+        arr_match = re.search(r'\[.*\]', raw_text, re.DOTALL)
+        if arr_match:
+            raw_text = arr_match.group()
         print(f"[INDICATIONS L2] after strip: {raw_text[:500]}", flush=True)
         if raw_text:  # re-check after fence stripping
             parsed = json.loads(raw_text)
