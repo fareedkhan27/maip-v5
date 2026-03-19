@@ -1915,6 +1915,7 @@ function GapAnalysisView({ sessionId, onClose }) {
   const [filter,  setFilter]  = React.useState('All');
   React.useEffect(() => {
     async function load() {
+      console.log('GAP sessionId:', sessionId);
       try {
         const res = await fetch(
           `/api/gap-analysis?session_id=${sessionId}`, {
@@ -1926,7 +1927,7 @@ function GapAnalysisView({ sessionId, onClose }) {
         if (json.success) setData(json);
         else setError(json.detail || 'Failed to load gap analysis.');
       } catch(e) {
-        setError('Connection error.');
+        setError('Connection error: ' + e.message);
       } finally {
         setLoading(false);
       }
