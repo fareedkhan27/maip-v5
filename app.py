@@ -5,7 +5,7 @@
 # Create .env: ANTHROPIC_API_KEY=sk-ant-...
 # Run: python app.py → http://localhost:8000
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Header, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Header, Depends, Query
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
