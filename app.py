@@ -2117,14 +2117,14 @@ async def get_indications(
                 candidate = block.text.strip()
                 if candidate:
                     raw_text = candidate  # keep updating — last non-empty wins
-        print(f"[INDICATIONS L2] raw text block: {raw_text[:500]}")
+        print(f"[INDICATIONS L2] raw text block: {raw_text[:500]}", flush=True)
         if raw_text:
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[-1]
             if raw_text.endswith("```"):
                 raw_text = raw_text.rsplit("```", 1)[0]
             raw_text = raw_text.strip()
-        print(f"[INDICATIONS L2] after strip: {raw_text[:500]}")
+        print(f"[INDICATIONS L2] after strip: {raw_text[:500]}", flush=True)
         if raw_text:  # re-check after fence stripping
             parsed = json.loads(raw_text)
             if isinstance(parsed, list):
@@ -2132,9 +2132,9 @@ async def get_indications(
                     str(i).strip() for i in parsed
                     if str(i).strip()
                 ]
-        print(f"[INDICATIONS L2] parsed count: {len(ai_indications)}")
+        print(f"[INDICATIONS L2] parsed count: {len(ai_indications)}", flush=True)
     except Exception as e:
-        print(f"[INDICATIONS L2] EXCEPTION: {e}")
+        print(f"[INDICATIONS L2] EXCEPTION: {e}", flush=True)
         # AI enrichment failure is non-fatal —
         # dataset indications still returned
         ai_indications = []
