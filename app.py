@@ -2093,8 +2093,10 @@ async def get_indications(
             f"List all currently FDA-approved and EMA-approved "
             f"oncology indications for {product} (generic name "
             f"if brand name given). Use web search to verify "
-            f"current label. Return only the indication names "
-            f"as a JSON array."
+            f"current label. Search globally. Do not filter by "
+            f"country. Return all FDA and EMA approved indications "
+            f"for {product} regardless of market. "
+            f"Return only the indication names as a JSON array."
         )
         response = call_anthropic_with_retry(
             client.messages.create,
@@ -2115,12 +2117,14 @@ async def get_indications(
                 candidate = block.text.strip()
                 if candidate:
                     raw_text = candidate  # keep updating — last non-empty wins
+        print(f"[INDICATIONS L2] raw text block: {raw_text[:500]}")
         if raw_text:
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[-1]
             if raw_text.endswith("```"):
                 raw_text = raw_text.rsplit("```", 1)[0]
             raw_text = raw_text.strip()
+        print(f"[INDICATIONS L2] after strip: {raw_text[:500]}")
         if raw_text:  # re-check after fence stripping
             parsed = json.loads(raw_text)
             if isinstance(parsed, list):
@@ -2128,7 +2132,9 @@ async def get_indications(
                     str(i).strip() for i in parsed
                     if str(i).strip()
                 ]
-    except Exception:
+        print(f"[INDICATIONS L2] parsed count: {len(ai_indications)}")
+    except Exception as e:
+        print(f"[INDICATIONS L2] EXCEPTION: {e}")
         # AI enrichment failure is non-fatal —
         # dataset indications still returned
         ai_indications = []
