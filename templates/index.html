@@ -262,6 +262,16 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
   box-shadow: 0 0 18px rgba(79,110,247,0.25);
   color: #ffffff !important;
 }
+/* FIX: [P6] pulse animation — visual affordance when summary available but not yet fetched */
+@keyframes ls-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(79,110,247,0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(79,110,247,0); }
+  100% { box-shadow: 0 0 0 0 rgba(79,110,247,0); }
+}
+.ls-pulse {
+  animation: ls-pulse 2s ease-in-out infinite;
+  border-color: #7b9bff;
+}
 .ls-toggle-label {
   display: flex;
   align-items: center;
@@ -2001,6 +2011,8 @@ function QueryModule({state,dispatch,onFeedback,onStatsRefresh}){
   const chatRef=useRef();
   const inputRef=useRef();
   const [thinkStage,setThinkStage]=useState(0);
+  const [queryCache,setQueryCache]=useState({}); // FIX: [query result cache] [prevent re-POST for identical queries] [risk delta: none — session-scoped, no persistence]
+  const getQueryCacheKey=(q)=>q.toLowerCase().trim();
 
   useEffect(()=>{if(chatRef.current)chatRef.current.scrollTop=chatRef.current.scrollHeight;},[state.messages]);
 
@@ -2009,6 +2021,25 @@ function QueryModule({state,dispatch,onFeedback,onStatsRefresh}){
   const submitQuery=async(q)=>{
     const query=q||input;
     if(!query.trim()||state.loading)return;
+    // FIX: [frontend cache hit] [render existing result, skip POST] [risk delta: none — same result would be returned]
+    const qKey=getQueryCacheKey(query);
+    if(queryCache[qKey]){
+      const res=queryCache[qKey];
+      dispatch({type:'ADD_MSG',payload:{role:'user',text:query}});
+      dispatch({type:'ADD_MSG',payload:{
+        role:'ai',text:res.narrative,stats:res.stats,
+        confidence:res.confidence,suggestions:res.zero_result_suggestions,
+        chartData:res.chart_data,filterSpec:res.filter_spec
+      }});
+      dispatch({type:'SET',payload:{
+        results:{rows:res.rows,total:res.total_rows},
+        chart:res.chart_data,stats:res.stats,page:1,loading:false,
+        confidence:res.confidence,suggestions:res.zero_result_suggestions||[],
+        filterSpec:res.filter_spec,resultTab:'table'
+      }});
+      setInput('');
+      return;
+    }
     dispatch({type:'ADD_MSG',payload:{role:'user',text:query}});
     dispatch({type:'SET',payload:{loading:true,confidence:null,suggestions:[]}});
     setThinkStage(0);
@@ -2034,6 +2065,8 @@ function QueryModule({state,dispatch,onFeedback,onStatsRefresh}){
         confidence:res.confidence,suggestions:res.zero_result_suggestions||[],
         filterSpec:res.filter_spec,resultTab:'table'
       }});
+      // FIX: [store result] [enables instant re-render on repeat query] [risk delta: none]
+      setQueryCache(prev=>({...prev,[qKey]:res}));
       onStatsRefresh&&onStatsRefresh();
     }catch(e){
       dispatch({type:'ADD_MSG',payload:{role:'ai',text:`Error: ${e.message}`}});
@@ -2552,21 +2585,24 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
   const [loading,setLoading]=React.useState(false);
   const [summary,setSummary]=React.useState(null);
   const [error,setError]=React.useState(null);
-  const [fetched,setFetched]=React.useState(false);
+  const [fetchedKey,setFetchedKey]=React.useState(null); // FIX: context-aware latch keyed by sKey, replaces boolean `fetched` [prevents stale-latch on reused component]
   const [compareCountry,setCompareCountry]=React.useState('');
   const [showCompare,setShowCompare]=React.useState(false);
   const [compareCache,setCompareCache]=React.useState({});
+  const sKey=React.useMemo(()=>[moduleId,country,product,indication].join('|').toLowerCase(),[moduleId,country,product,indication]); // FIX: stable context key derived from all identity props [single source of truth]
   React.useEffect(()=>{
-    if(intelligenceText&&intelligenceText.length>100&&!fetched){
-      setOpen(true);
-      fetchSummary();
+    if(intelligenceText&&intelligenceText.length>100&&fetchedKey!==sKey){ // FIX: compare context key instead of boolean — allows re-fetch when context changes [root cause fix]
+      if(summaryCache&&summaryCache[sKey]){
+        setSummary(summaryCache[sKey]);setFetchedKey(sKey);setOpen(true); // FIX: latch by context key [cache-restore path]
+        return;
+      }
+      // FIX: [P6] removed auto-fire fetchSummary() — summary now requires explicit button click [saves ~2k Sonnet tokens per silent cascade]
     }
-  },[intelligenceText]);
+  },[intelligenceText,moduleId,country,product,indication,sKey]); // FIX: full dependency array — effect re-fires on any context prop change [stale-closure fix]
   async function fetchSummary(){
-    if(fetched){setOpen(o=>!o);return;}
-    const sKey=[moduleId,country,product,indication].join('|').toLowerCase();
+    if(fetchedKey===sKey){setOpen(o=>!o);return;} // FIX: context-aware guard replaces boolean check [prevents wrong-context latch]
     if(summaryCache&&summaryCache[sKey]){
-      setSummary(summaryCache[sKey]);setFetched(true);setOpen(true);
+      setSummary(summaryCache[sKey]);setFetchedKey(sKey);setOpen(true); // FIX: latch by context key [cache-restore path]
       console.log('[Summary] cache hit:',sKey);
       return;
     }
@@ -2575,7 +2611,7 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
       const res=await fetch('/api/leadership-summary',{method:'POST',headers:{'Content-Type':'application/json','x-access-key':sessionStorage.getItem('maip_access_key')||''},body:JSON.stringify({module_id:moduleId,module_name:MODULE_TITLES[moduleId]||'',country,product,indication,intelligence_text:intelligenceText})});
       const data=await res.json();
       if(data.success){
-        setSummary(data.summary);setFetched(true);
+        setSummary(data.summary);setFetchedKey(sKey); // FIX: latch by context key on POST success [replaces boolean setFetched(true)]
         onSummaryCache&&onSummaryCache(prev=>({...prev,[sKey]:data.summary}));
       }
       else{setError(data.error||'Summary unavailable.');}
@@ -2585,7 +2621,7 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
   const fields=MODULE_FIELD_LABELS[moduleId]||[];
   const title=MODULE_TITLES[moduleId]||'Leadership Summary';
   return React.createElement('div',{className:'ls-wrapper'},
-    React.createElement('button',{className:'ls-toggle-btn',onClick:fetchSummary},
+    React.createElement('button',{className:'ls-toggle-btn'+(fetchedKey!==sKey&&intelligenceText&&intelligenceText.length>100?' ls-pulse':''),onClick:fetchSummary},
       React.createElement('span',{className:'ls-toggle-label'},'Leadership Summary — '+title.toUpperCase()),
       React.createElement('span',{className:'ls-toggle-chevron'},open?'▲':'▼')
     ),

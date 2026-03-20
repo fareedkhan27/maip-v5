@@ -36,6 +36,7 @@ def require_access_key(x_access_key: str = Header(default=None)):
         raise HTTPException(status_code=401, detail="Invalid or missing access key.")
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "20"))
 SESSION_EXPIRY_HOURS = int(os.getenv("SESSION_EXPIRY_HOURS", "4"))
+RESEARCH_CACHE_TTL_HOURS = int(os.getenv("RESEARCH_CACHE_TTL_HOURS", "24"))  # FIX: configurable TTL for research + response caches
 
 # ── Daily token budget tracker ─────────────────────────────────────
 _token_usage = {
@@ -142,6 +143,20 @@ def init_db():
     # Migration: add expires_at column to sessions if not present
     try:
         conn.execute("ALTER TABLE sessions ADD COLUMN expires_at TEXT")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
+    # FIX: response_cache table for leadership-summary + indications caching
+    c.execute("""CREATE TABLE IF NOT EXISTS response_cache (
+        cache_key  TEXT PRIMARY KEY,
+        endpoint   TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+    )""")
+    # FIX: add expires_at to research_cache if not present (TTL support)
+    try:
+        conn.execute("ALTER TABLE research_cache ADD COLUMN expires_at TEXT")
         conn.commit()
     except Exception:
         pass  # Column already exists
@@ -1433,6 +1448,25 @@ async def query(request: Request, body: QueryRequest):
 
         expanded = expand_abbreviations(body.query, profile)
 
+        # FIX: [query cache lookup] [skip both Haiku calls + budget check on cache hit] [risk delta: none — deterministic result for same session+query]
+        query_cache_key = hashlib.sha256(
+            f"query|{body.session_id}|{expanded.lower().strip()}".encode()
+        ).hexdigest()
+        try:
+            conn = get_db()
+            cached = conn.execute(
+                "SELECT result_json FROM response_cache WHERE cache_key=? AND expires_at>?",
+                (query_cache_key, datetime.utcnow().isoformat())
+            ).fetchone()
+            conn.close()
+            if cached:
+                return JSONResponse(
+                    content=json.loads(cached["result_json"]),
+                    headers={"X-Cache": "HIT"}
+                )
+        except Exception:
+            pass  # FIX: [non-fatal] [cache miss on error — falls through to Anthropic]
+
         # Stage 1: Intent parsing
         if body.filter_spec:
             filter_spec = body.filter_spec
@@ -1553,7 +1587,7 @@ async def query(request: Request, body: QueryRequest):
 
         log_audit("QUERY", f"Query: {body.query}, Results: {total}", request.client.host if request.client else "")
 
-        return {
+        result_payload = {
             "original_query": body.query,
             "expanded_query": expanded,
             "filter_spec": filter_spec,
@@ -1566,6 +1600,23 @@ async def query(request: Request, body: QueryRequest):
             "zero_result_suggestions": zero_suggestions,
             "execution_ms": exec_ms,
         }
+        # FIX: [query cache write] [persist query result to response_cache — prevents repeat Haiku calls on identical query] [risk delta: none — deterministic for same session+query]
+        try:
+            conn = get_db()
+            conn.execute(
+                "INSERT OR REPLACE INTO response_cache (cache_key, endpoint, result_json, created_at, expires_at) VALUES (?,?,?,?,?)",
+                (query_cache_key, "query", json.dumps(result_payload, default=str),
+                 datetime.utcnow().isoformat(),
+                 (datetime.utcnow() + timedelta(hours=RESEARCH_CACHE_TTL_HOURS)).isoformat())
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass  # FIX: [non-fatal] [cache write failure does not affect response]
+        return JSONResponse(
+            content=result_payload,
+            headers={"X-Cache": "MISS"}
+        )
 
     except HTTPException:
         raise
@@ -1590,21 +1641,27 @@ async def research(request: Request, body: ResearchRequest):
         (body.subtype + json.dumps(body.context, sort_keys=True)).encode()
     ).hexdigest()
 
-    # Check cache
+    # FIX: check cache with TTL — expired entries are ignored, not returned
     conn = get_db()
-    cached = conn.execute("SELECT * FROM research_cache WHERE cache_key=?", (cache_key,)).fetchone()
+    cached = conn.execute(
+        "SELECT * FROM research_cache WHERE cache_key=? AND (expires_at IS NULL OR expires_at>?)",
+        (cache_key, datetime.utcnow().isoformat())
+    ).fetchone()
     conn.close()
 
     if cached:
-        return {
-            "subtype": body.subtype,
-            "context": body.context,
-            "result_text": cached["result_text"],
-            "confidence": cached["confidence"],
-            "sources": json.loads(cached["sources_json"]) if cached["sources_json"] else [],
-            "cached": True,
-            "created_at": cached["created_at"],
-        }
+        return JSONResponse(
+            content={
+                "subtype": body.subtype,
+                "context": body.context,
+                "result_text": cached["result_text"],
+                "confidence": cached["confidence"],
+                "sources": json.loads(cached["sources_json"]) if cached["sources_json"] else [],
+                "cached": True,
+                "created_at": cached["created_at"],
+            },
+            headers={"X-Cache": "HIT"}  # FIX: cache-hit header for diagnostics
+        )
 
     if not client:
         raise HTTPException(status_code=503, detail="AI unavailable")
@@ -1629,11 +1686,11 @@ async def research(request: Request, body: ResearchRequest):
     if "[Verified]" in result_text:
         confidence_label = "High"
 
-    # Cache result
+    # FIX: cache result with TTL — expires_at enables automatic staleness detection
     try:
         conn = get_db()
         conn.execute(
-            "INSERT OR REPLACE INTO research_cache (cache_key, subtype, context_json, result_text, confidence, sources_json, created_at) VALUES (?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO research_cache (cache_key, subtype, context_json, result_text, confidence, sources_json, created_at, expires_at) VALUES (?,?,?,?,?,?,?,?)",
             (
                 cache_key,
                 body.subtype,
@@ -1642,6 +1699,7 @@ async def research(request: Request, body: ResearchRequest):
                 confidence_label,
                 json.dumps([]),
                 datetime.utcnow().isoformat(),
+                (datetime.utcnow() + timedelta(hours=RESEARCH_CACHE_TTL_HOURS)).isoformat(),
             ),
         )
         conn.commit()
@@ -1651,16 +1709,19 @@ async def research(request: Request, body: ResearchRequest):
 
     log_audit("RESEARCH", f"Subtype: {body.subtype}, Context: {json.dumps(body.context)}", request.client.host if request.client else "")
 
-    return {
-        "subtype": body.subtype,
-        "context": body.context,
-        "result_text": result_text,
-        "confidence": confidence_label,
-        "sources": [],
-        "cached": False,
-        "created_at": datetime.utcnow().isoformat(),
-        "execution_ms": int((time.time() - start) * 1000),
-    }
+    return JSONResponse(
+        content={
+            "subtype": body.subtype,
+            "context": body.context,
+            "result_text": result_text,
+            "confidence": confidence_label,
+            "sources": [],
+            "cached": False,
+            "created_at": datetime.utcnow().isoformat(),
+            "execution_ms": int((time.time() - start) * 1000),
+        },
+        headers={"X-Cache": "MISS"}  # FIX: cache-miss header for diagnostics
+    )
 
 
 class ExportRequest(BaseModel):
@@ -1880,6 +1941,25 @@ def leadership_summary(request: Request, body: LeadershipSummaryRequest):
     SUPPORTED_MODULES = {3, 4, 5, 8}
     if body.module_id not in SUPPORTED_MODULES:
         raise HTTPException(status_code=400, detail="Module not supported for leadership summary.")
+    # FIX: check response_cache before calling Anthropic — prevents duplicate Sonnet calls on remount
+    ls_cache_key = hashlib.sha256(
+        f"ls|{body.module_id}|{body.country}|{body.product}|{body.indication}|{body.intelligence_text[:4000]}".encode()
+    ).hexdigest()
+    try:
+        conn = get_db()
+        cached = conn.execute(
+            "SELECT result_json FROM response_cache WHERE cache_key=? AND expires_at>?",
+            (ls_cache_key, datetime.utcnow().isoformat())
+        ).fetchone()
+        conn.close()
+        if cached:
+            summary_data = json.loads(cached["result_json"])
+            return JSONResponse(
+                content={"success": True, "summary": summary_data, "module_id": body.module_id, "cached": True},
+                headers={"X-Cache": "HIT"}  # FIX: cache-hit header for diagnostics
+            )
+    except Exception:
+        pass  # FIX: cache lookup failure is non-fatal — fall through to API call
     system_prompt = LEADERSHIP_MODULE_PROMPTS[body.module_id]
     user_message = f"""Country: {body.country}
 Product: {body.product}
@@ -1888,6 +1968,7 @@ Intelligence Output:
 {body.intelligence_text[:4000]}"""
     if not client:
         return {"success": False, "error": "AI unavailable.", "module_id": body.module_id}
+    _check_budget(3000)  # FIX: [budget guard] [leadership-summary was unguarded — could bypass daily cap] [prevents ~3k tokens/call from being untracked]
     try:
         response = call_anthropic_with_retry(
             client.messages.create,
@@ -1904,7 +1985,23 @@ Intelligence Output:
             raw = raw.rsplit("```", 1)[0]
         raw = raw.strip()
         summary_data = json.loads(raw)
-        return {"success": True, "summary": summary_data, "module_id": body.module_id}
+        # FIX: persist to response_cache so subsequent calls return cached result
+        try:
+            conn = get_db()
+            conn.execute(
+                "INSERT OR REPLACE INTO response_cache (cache_key, endpoint, result_json, created_at, expires_at) VALUES (?,?,?,?,?)",
+                (ls_cache_key, "leadership-summary", json.dumps(summary_data),
+                 datetime.utcnow().isoformat(),
+                 (datetime.utcnow() + timedelta(hours=RESEARCH_CACHE_TTL_HOURS)).isoformat())
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass  # FIX: cache write failure is non-fatal
+        return JSONResponse(
+            content={"success": True, "summary": summary_data, "module_id": body.module_id, "cached": False},
+            headers={"X-Cache": "MISS"}  # FIX: cache-miss header for diagnostics
+        )
     except (json.JSONDecodeError, ValueError):
         return {"success": False, "error": "Summary parsing failed.", "module_id": body.module_id}
     except Exception as e:
@@ -1920,6 +2017,27 @@ async def compare_markets(request: Request,
     if body.module_id not in SUPPORTED_MODULES:
         raise HTTPException(status_code=400,
             detail="Module not supported for comparison.")
+
+    _check_budget(6000)  # FIX: [budget guard] [compare-markets was unguarded — 2 Sonnet calls could bypass daily cap] [estimated 3k tokens × 2 summaries]
+
+    # FIX: [server-side cache] [compare-markets had no response_cache — repeat comparisons fired 2 fresh Sonnet calls] [saves ~6k tokens per cache hit]
+    cmp_cache_key = hashlib.sha256(
+        f"cmp|{body.module_id}|{body.country_a}|{body.country_b}|{body.product}|{body.indication}".encode()
+    ).hexdigest()
+    try:
+        conn = get_db()
+        cached = conn.execute(
+            "SELECT result_json FROM response_cache WHERE cache_key=? AND expires_at>?",
+            (cmp_cache_key, datetime.utcnow().isoformat())
+        ).fetchone()
+        conn.close()
+        if cached:
+            return JSONResponse(
+                content=json.loads(cached["result_json"]),
+                headers={"X-Cache": "HIT"}
+            )
+    except Exception:
+        pass  # cache lookup failure is non-fatal
 
     def summarise(country: str, intel_text: str) -> dict:
         """
@@ -1977,7 +2095,7 @@ async def compare_markets(request: Request,
                 asyncio.to_thread(summarise, body.country_a, body.intel_text_a),
                 asyncio.to_thread(summarise, body.country_b, body.intel_text_b),
             )
-        return {
+        result_payload = {
             "success":   True,
             "module_id": body.module_id,
             "country_a": body.country_a,
@@ -1985,6 +2103,23 @@ async def compare_markets(request: Request,
             "summary_a": summary_a,
             "summary_b": summary_b,
         }
+        # FIX: [cache write] [persist compare result to response_cache — prevents 2 Sonnet calls on repeat comparison] [saves ~6k tokens per hit]
+        try:
+            conn = get_db()
+            conn.execute(
+                "INSERT OR REPLACE INTO response_cache (cache_key, endpoint, result_json, created_at, expires_at) VALUES (?,?,?,?,?)",
+                (cmp_cache_key, "compare-markets", json.dumps(result_payload),
+                 datetime.utcnow().isoformat(),
+                 (datetime.utcnow() + timedelta(hours=RESEARCH_CACHE_TTL_HOURS)).isoformat())
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass  # cache write failure is non-fatal
+        return JSONResponse(
+            content=result_payload,
+            headers={"X-Cache": "MISS"}
+        )
     except json.JSONDecodeError as e:
         raise HTTPException(
             status_code=500,
@@ -2087,6 +2222,24 @@ async def get_indications(
     product: str = Query(...),
     session_id: str = Query(...)
 ):
+    # FIX: check response_cache before Haiku call — indications are product-scoped, not session-scoped
+    ind_cache_key = hashlib.sha256(
+        f"indications|{product.strip().lower()}".encode()
+    ).hexdigest()
+    try:
+        conn = get_db()
+        cached = conn.execute(
+            "SELECT result_json FROM response_cache WHERE cache_key=? AND expires_at>?",
+            (ind_cache_key, datetime.utcnow().isoformat())
+        ).fetchone()
+        conn.close()
+        if cached:
+            return JSONResponse(
+                content=json.loads(cached["result_json"]),
+                headers={"X-Cache": "HIT"}  # FIX: cache-hit header for diagnostics
+            )
+    except Exception:
+        pass  # FIX: cache lookup failure is non-fatal — fall through to extraction
     # ── Layer 1: Dataset extraction ──────────────────────
     dataset_indications = []
     try:
@@ -2108,6 +2261,7 @@ async def get_indications(
         dataset_indications = []
 
     # ── Layer 2: AI enrichment (Haiku + web_search) ──────
+    _check_budget(1500)  # FIX: [budget guard] [indications was unguarded — Haiku + web_search could bypass daily cap] [estimated ~1.5k tokens]
     ai_indications = []
     try:
         system_prompt = (
@@ -2181,7 +2335,7 @@ async def get_indications(
         if key not in seen:
             seen.add(key)
             results.append({"label": ind, "source": "FDA/EMA"})
-    return {
+    result_payload = {
         "success":      True,
         "product":      product,
         "indications":  results,
@@ -2189,6 +2343,24 @@ async def get_indications(
         "from_dataset": len(dataset_indications),
         "from_ai":      len(ai_indications)
     }
+    # FIX: persist to response_cache — no TTL needed for indications (dataset-scoped, static)
+    # Using 720h (30 days) as a practical upper bound to avoid unbounded growth
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT OR REPLACE INTO response_cache (cache_key, endpoint, result_json, created_at, expires_at) VALUES (?,?,?,?,?)",
+            (ind_cache_key, "indications", json.dumps(result_payload),
+             datetime.utcnow().isoformat(),
+             (datetime.utcnow() + timedelta(hours=720)).isoformat())
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass  # FIX: cache write failure is non-fatal
+    return JSONResponse(
+        content=result_payload,
+        headers={"X-Cache": "MISS"}  # FIX: cache-miss header for diagnostics
+    )
 
 
 class CoverageRequest(BaseModel):
@@ -2204,6 +2376,24 @@ class CoverageRequest(BaseModel):
 async def indication_coverage(request: Request,
                                body: CoverageRequest):
     try:
+        # FIX: [server-side cache] [indication-coverage had no response_cache — repeat Haiku normalisation calls wasted ~1.5k tokens each] [saves ~1.5k tokens per cache hit]
+        cov_cache_key = hashlib.sha256(
+            f"cov|{body.product}|{body.country}|{'|'.join(sorted(body.fda_indications[:15]))}".encode()
+        ).hexdigest()
+        try:
+            conn = get_db()
+            cached = conn.execute(
+                "SELECT result_json FROM response_cache WHERE cache_key=? AND expires_at>?",
+                (cov_cache_key, datetime.utcnow().isoformat())
+            ).fetchone()
+            if cached:
+                return JSONResponse(
+                    content=json.loads(cached[0]),
+                    headers={"X-Cache": "HIT"}
+                )
+        except Exception:
+            pass
+
         # ── Layer 1: Dataset cross-reference ─────────────
         dataset_map = {}
         try:
@@ -2242,6 +2432,7 @@ async def indication_coverage(request: Request,
             dataset_map = {}
 
         # ── Layer 2: Haiku normalisation ──────────────────
+        _check_budget(1500)  # FIX: [budget guard] [indication-coverage was unguarded — Haiku normalisation could bypass daily cap] [estimated ~1.5k tokens]
         matches = []
         if body.fda_indications and dataset_map:
             try:
@@ -2332,7 +2523,7 @@ async def indication_coverage(request: Request,
         coverage_pct = round(
             (covered / total * 100) if total > 0 else 0, 1
         )
-        return {
+        result_payload = {
             "success":       True,
             "product":       body.product,
             "country":       body.country,
@@ -2347,6 +2538,22 @@ async def indication_coverage(request: Request,
                              body.fda_indications and
                              dataset_map else "fallback"
         }
+        # FIX: [cache write] [persist coverage result to response_cache — prevents repeat Haiku normalisation calls] [saves ~1.5k tokens per hit]
+        try:
+            conn = get_db()
+            conn.execute(
+                "INSERT OR REPLACE INTO response_cache (cache_key, endpoint, result_json, created_at, expires_at) VALUES (?,?,?,?,?)",
+                (cov_cache_key, "indication-coverage", json.dumps(result_payload),
+                 datetime.utcnow().isoformat(),
+                 (datetime.utcnow() + timedelta(hours=RESEARCH_CACHE_TTL_HOURS)).isoformat())
+            )
+            conn.commit()
+        except Exception:
+            pass
+        return JSONResponse(
+            content=result_payload,
+            headers={"X-Cache": "MISS"}
+        )
     except Exception as e:
         raise HTTPException(
             status_code=500,
