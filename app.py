@@ -161,6 +161,22 @@ def init_db():
     except Exception:
         pass  # Column already exists
     conn.commit()
+    # FIX: [purge poisoned cache entries] [clears any cached error responses written before this fix was deployed] [risk delta: none — only deletes entries matching known error patterns]
+    try:
+        conn.execute("""
+            DELETE FROM response_cache
+            WHERE endpoint = 'leadership-summary'
+            AND (
+                result_json LIKE '%rate_limit%' OR
+                result_json LIKE '%rate limit%' OR
+                result_json LIKE '%Request failed%' OR
+                result_json LIKE '%overloaded%' OR
+                result_json LIKE '%529%'
+            )
+        """)
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
 
 
@@ -1985,6 +2001,19 @@ Intelligence Output:
             raw = raw.rsplit("```", 1)[0]
         raw = raw.strip()
         summary_data = json.loads(raw)
+        # FIX: [validate before cache write] [prevents error/rate-limit responses from poisoning cache] [risk delta: none — error still returned to client]
+        _sd_str = json.dumps(summary_data).lower()
+        is_error = (
+            not isinstance(summary_data, dict) or
+            "error" in summary_data or
+            any(phrase in _sd_str for phrase in
+                ["rate limit", "rate_limit", "request failed", "overloaded", "529"])
+        )
+        if is_error:
+            return JSONResponse(
+                content={"success": True, "summary": summary_data, "module_id": body.module_id, "cached": False},
+                headers={"X-Cache": "SKIP-ERROR"}  # FIX: [skip cache on error content] [risk delta: none]
+            )
         # FIX: persist to response_cache so subsequent calls return cached result
         try:
             conn = get_db()

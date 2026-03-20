@@ -2599,13 +2599,14 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
       // FIX: [P6] removed auto-fire fetchSummary() — summary now requires explicit button click [saves ~2k Sonnet tokens per silent cascade]
     }
   },[intelligenceText,moduleId,country,product,indication,sKey]); // FIX: full dependency array — effect re-fires on any context prop change [stale-closure fix]
+  function handleToggle(){ // FIX: [separate toggle from fetch] [open/close must not trigger API call] [risk delta: none — explicit fetch button remains inside card]
+    if(!open){
+      if(summaryCache&&summaryCache[sKey]){setSummary(summaryCache[sKey]);setFetchedKey(sKey);} // FIX: [cache restore on open] [no API call on expand] [risk delta: none]
+      setOpen(true);
+    }else{setOpen(false);}
+  }
   async function fetchSummary(){
-    if(fetchedKey===sKey){setOpen(o=>!o);return;} // FIX: context-aware guard replaces boolean check [prevents wrong-context latch]
-    if(summaryCache&&summaryCache[sKey]){
-      setSummary(summaryCache[sKey]);setFetchedKey(sKey);setOpen(true); // FIX: latch by context key [cache-restore path]
-      console.log('[Summary] cache hit:',sKey);
-      return;
-    }
+    if(loading)return; // FIX: [debounce guard] [prevents double-fetch on rapid click] [risk delta: none]
     setOpen(true);setLoading(true);setError(null);
     try{
       const res=await fetch('/api/leadership-summary',{method:'POST',headers:{'Content-Type':'application/json','x-access-key':sessionStorage.getItem('maip_access_key')||''},body:JSON.stringify({module_id:moduleId,module_name:MODULE_TITLES[moduleId]||'',country,product,indication,intelligence_text:intelligenceText})});
@@ -2621,7 +2622,7 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
   const fields=MODULE_FIELD_LABELS[moduleId]||[];
   const title=MODULE_TITLES[moduleId]||'Leadership Summary';
   return React.createElement('div',{className:'ls-wrapper'},
-    React.createElement('button',{className:'ls-toggle-btn'+(fetchedKey!==sKey&&intelligenceText&&intelligenceText.length>100?' ls-pulse':''),onClick:fetchSummary},
+    React.createElement('button',{className:'ls-toggle-btn'+(fetchedKey!==sKey&&intelligenceText&&intelligenceText.length>100?' ls-pulse':''),onClick:handleToggle}, // FIX: [toggle calls handleToggle not fetchSummary] [prevents API call on expand/collapse] [risk delta: none]
       React.createElement('span',{className:'ls-toggle-label'},'Leadership Summary — '+title.toUpperCase()),
       React.createElement('span',{className:'ls-toggle-chevron'},open?'▲':'▼')
     ),
@@ -2631,6 +2632,7 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
       ),
       loading&&React.createElement('div',{className:'ls-loading'},'Generating leadership summary…'),
       error&&React.createElement('div',{className:'ls-error'},error),
+      !loading&&!summary&&React.createElement('button',{className:'ls-toggle-btn ls-pulse',onClick:fetchSummary,style:{margin:'12px 0'}},'Generate Leadership Summary'), // FIX: [explicit fetch button inside card] [fetchSummary only from deliberate click, not toggle] [risk delta: none]
       summary&&React.createElement('div',null,
         React.createElement('div',{className:'ls-fields'},
           fields.map(([key,label])=>React.createElement('div',{className:'ls-field-row',key},
