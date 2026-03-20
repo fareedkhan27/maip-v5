@@ -1057,6 +1057,12 @@ def map_api_error_to_user_message(e: Exception) -> dict:
                 "user_message": "A configuration issue was detected. Please contact support.",
                 "retry_suggested": False,
             }
+        elif e.status_code == 400 and "usage limits" in str(e).lower():
+            msg = {
+                "error_code": "SPEND_LIMIT",
+                "user_message": "Anthropic API monthly spend limit reached. Increase the limit at console.anthropic.com → Settings → Billing.",
+                "retry_suggested": False,
+            }
         else:
             msg = {
                 "error_code": "AI_ERROR",
