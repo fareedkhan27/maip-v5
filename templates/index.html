@@ -2488,7 +2488,6 @@ function CompareView({
     const cmpKey=[moduleId,product||'',indication||'',countryA,countryB].join('|').toLowerCase();
     if(compareCache&&compareCache[cmpKey]){
       setData(compareCache[cmpKey]);setLoading(false);
-      console.log('[Compare] cache hit:',cmpKey);
       return;
     }
     let cancelled = false;
@@ -2899,7 +2898,6 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
     if(researchCache[rKey]){
       const alreadyExists=state.researchCards.some(c=>c.subtype===researchCache[rKey].subtype&&c.product===researchCache[rKey].product&&c.country===researchCache[rKey].country&&c.indication===researchCache[rKey].indication);
       if(!alreadyExists)dispatch({type:'ADD_RESEARCH',payload:researchCache[rKey]});
-      console.log('[Research] cache hit:',rKey);
       return;
     }
     setResearchError(null);
@@ -2933,7 +2931,6 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
     if(!product||!country||!state.sessionId||fdaIndications.length===0)return;
     const cacheKey=`${product}|${country}`;
     if(coverageCache[cacheKey]){
-      console.log('[Coverage] cache hit:',cacheKey);
       setCoverageData(coverageCache[cacheKey]);
       return;
     }
