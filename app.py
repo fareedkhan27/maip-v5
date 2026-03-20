@@ -2424,7 +2424,7 @@ async def get_indications(
 
 
 @app.get("/api/indication-landscape", dependencies=[Depends(require_access_key)])
-@limiter.limit("3/hour")
+@limiter.limit("10/hour")
 async def indication_landscape(
     request: Request,
     product: str = Query(...),
@@ -2539,6 +2539,7 @@ async def indication_landscape(
             detail=f"Landscape JSON parse failed: {str(e)}"
         )
     except Exception as e:
+        import traceback; traceback.print_exc()
         err = map_api_error_to_user_message(e)
         raise HTTPException(status_code=500, detail=err["user_message"])
 
