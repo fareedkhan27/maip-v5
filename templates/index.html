@@ -640,6 +640,8 @@ input,textarea,select{font-family:var(--font-sans);font-size:14px}
 .cov-ov-score-wrap{text-align:center;padding:16px 24px 8px;}
 .cov-btn{width:100%;margin-top:8px;justify-content:center;border-color:rgba(20,184,166,0.35);color:#14b8a6;}
 .cov-btn:disabled{opacity:0.4;cursor:not-allowed;}
+.ls-btn{width:100%;margin-top:8px;justify-content:center;border-color:rgba(139,92,246,0.35);color:#8b5cf6;}
+.ls-btn.active{background:rgba(139,92,246,0.08);}
 /* ── Indication Lookup ───────────────────────── */
 .ind-input-wrap {
   position: relative;
@@ -3034,6 +3036,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
   const [coverageLoading,setCoverageLoading]=React.useState(false);
   const [coverageCache,setCoverageCache]=React.useState({});
   const [showCoverage,setShowCoverage]=React.useState(false);
+  const [showLandscape,setShowLandscape]=React.useState(false);
   const [summaryCache,setSummaryCache]=useState({});
 
   const subtypes=[
@@ -3135,7 +3138,6 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
         React.createElement('input',{className:'mi-select ind-input-padded',placeholder:'Type or click \u2728 to fetch',value:indication,onChange:e=>setIndication(e.target.value)}),
         React.createElement(IndicationLookup,{product,sessionId:state.sessionId,currentValue:indication,onSelect:value=>setIndication(value),cache:indicationCache,onCache:setIndicationCache})
       ),
-      product&&state.sessionId&&React.createElement(IndicationLandscapePanel,{product,accessKey:sessionStorage.getItem('maip_access_key')||''}),
       React.createElement('button',{className:'btn btn-primary',style:{width:'100%',marginTop:16,justifyContent:'center'},onClick:runResearch,disabled:state.researchLoading},
         state.researchLoading?React.createElement('span',{className:'spinner'}):null,
         state.researchLoading?' Researching...':'\uD83D\uDD0D Run Research'
@@ -3150,9 +3152,18 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
         coverageData?'\uD83D\uDCCA Coverage \u2713':
         fdaIndications.length===0?'\uD83D\uDCCA Coverage (fetch \u2728 first)':
         '\uD83D\uDCCA Coverage\u2026'
+      ),
+      React.createElement('button',{
+        className:'btn ls-btn'+(showLandscape?' active':''),
+        onClick:()=>product&&setShowLandscape(v=>!v),
+        disabled:!product||!state.sessionId,
+        title:'View full indication landscape grouped by therapy area'
+      },
+        showLandscape?'\uD83E\uDDEC Landscape \u2713':'\uD83E\uDDEC Landscape'
       )
     ),
     React.createElement('div',{className:'mi-content'},
+      showLandscape&&product&&state.sessionId&&React.createElement(IndicationLandscapePanel,{product,accessKey:sessionStorage.getItem('maip_access_key')||''}),
       researchError&&(()=>{
         const{message,showRetry}=getResearchErrorDisplay(researchError);
         return React.createElement('div',{className:'research-error-banner'},
