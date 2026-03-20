@@ -2692,6 +2692,162 @@ function LeadershipSummaryCard({moduleId,country,product,indication,intelligence
   );
 }
 
+// ─── Indication Landscape Panel ───
+const IndicationLandscapePanel = ({ product, accessKey }) => {
+  const [state, setState] = React.useState("idle");
+  const [data, setData]   = React.useState(null);
+  const [error, setError] = React.useState(null);
+  const [cacheHit, setCacheHit] = React.useState(false);
+  const dataRef = React.useRef(null);
+
+  const TA_COLORS = {
+    "Melanoma":         { bg: "#f3e8ff", border: "#9333ea", text: "#581c87", dot: "#9333ea" },
+    "NSCLC":            { bg: "#eff6ff", border: "#3b82f6", text: "#1e3a5f", dot: "#3b82f6" },
+    "SCLC":             { bg: "#f0f9ff", border: "#0ea5e9", text: "#0c4a6e", dot: "#0ea5e9" },
+    "RCC":              { bg: "#fff7ed", border: "#f97316", text: "#7c2d12", dot: "#f97316" },
+    "Colorectal":       { bg: "#f0fdf4", border: "#22c55e", text: "#14532d", dot: "#22c55e" },
+    "Gastric/GEJ":      { bg: "#fefce8", border: "#eab308", text: "#713f12", dot: "#eab308" },
+    "Esophageal":       { bg: "#fff1f2", border: "#f43f5e", text: "#881337", dot: "#f43f5e" },
+    "Urothelial":       { bg: "#f5f3ff", border: "#8b5cf6", text: "#3b0764", dot: "#8b5cf6" },
+    "HCC":              { bg: "#fff7f0", border: "#ef4444", text: "#7f1d1d", dot: "#ef4444" },
+    "Hodgkin Lymphoma": { bg: "#fdf4e7", border: "#d97706", text: "#78350f", dot: "#d97706" },
+    "HNSCC":            { bg: "#f1f5f9", border: "#475569", text: "#1e293b", dot: "#475569" },
+    "Mesothelioma":     { bg: "#f8fafc", border: "#64748b", text: "#1e293b", dot: "#64748b" },
+    "Breast":           { bg: "#fdf2f8", border: "#ec4899", text: "#701a75", dot: "#ec4899" },
+    "Other":            { bg: "#f8f8f8", border: "#9ca3af", text: "#374151", dot: "#9ca3af" },
+  };
+
+  const getTA = (ta) => TA_COLORS[ta] || TA_COLORS["Other"];
+
+  const StatusBadge = ({ status }) => {
+    const cfg = {
+      "Approved":     { bg: "#dcfce7", color: "#15803d", label: "Approved" },
+      "Accelerated":  { bg: "#fef9c3", color: "#b45309", label: "Accelerated" },
+      "Pipeline":     { bg: "#dbeafe", color: "#1d4ed8", label: "Pipeline" },
+      "Withdrawn":    { bg: "#fee2e2", color: "#b91c1c", label: "Withdrawn" },
+    }[status] || { bg: "#f3f4f6", color: "#6b7280", label: status };
+    return (
+      React.createElement('span', { style: { display:"inline-block", padding:"2px 8px", borderRadius:"999px", fontSize:"11px", fontWeight:600, backgroundColor:cfg.bg, color:cfg.color, whiteSpace:"nowrap" } },
+        cfg.label
+      )
+    );
+  };
+
+  const loadLandscape = async () => {
+    if (dataRef.current) { setData(dataRef.current); setState("done"); return; }
+    setState("loading"); setError(null);
+    try {
+      const res = await fetch(`/api/indication-landscape?product=${encodeURIComponent(product)}`, { headers: { "x-access-key": accessKey } });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || `HTTP ${res.status}`); }
+      const json = await res.json();
+      setCacheHit(res.headers.get("X-Cache") === "HIT");
+      dataRef.current = json; setData(json); setState("done");
+    } catch (e) { setError(e.message || "Failed to load landscape."); setState("error"); }
+  };
+
+  const grouped = React.useMemo(() => {
+    if (!data?.indications) return {};
+    return data.indications.reduce((acc, ind) => {
+      const ta = ind.therapy_area || "Other";
+      if (!acc[ta]) acc[ta] = [];
+      acc[ta].push(ind);
+      return acc;
+    }, {});
+  }, [data]);
+
+  const TH = { padding:"6px 10px", fontSize:"11px", fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:"0.05em", borderBottom:"1px solid #e5e7eb", whiteSpace:"nowrap", textAlign:"left" };
+  const TD = { padding:"7px 10px", verticalAlign:"top", borderBottom:"1px solid #f3f4f6", fontSize:"12.5px", lineHeight:"1.45" };
+
+  const headerNames = ["Indication","Line","Trial","Code","Status","Key Combinations","Markets","Year","Notes"];
+  const colWidths = ["22%","8%","14%","10%","12%","14%","10%","6%","18%"];
+
+  return (
+    React.createElement('div', { style: { marginTop:"24px", border:"1px solid #e5e7eb", borderRadius:"10px", overflow:"hidden", fontFamily:"system-ui,-apple-system,sans-serif" } },
+      React.createElement('div', { style: { display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 18px", background:"linear-gradient(135deg,#1e293b 0%,#334155 100%)", color:"#fff" } },
+        React.createElement('div', null,
+          React.createElement('div', { style: { fontWeight:700, fontSize:"15px" } }, "Indication Landscape"),
+          React.createElement('div', { style: { fontSize:"12px", color:"#94a3b8", marginTop:"2px" } }, product, " · Approved & Pipeline · Grouped by Therapy Area")
+        ),
+        React.createElement('div', { style: { display:"flex", gap:"10px", alignItems:"center" } },
+          state === "done" && cacheHit && React.createElement('span', { style: { fontSize:"11px", color:"#64748b", background:"#1e293b", padding:"2px 8px", borderRadius:"4px" } }, "cached"),
+          state === "done" && data && React.createElement('span', { style: { fontSize:"12px", color:"#94a3b8" } }, data.total, " indications"),
+          state !== "loading" && React.createElement('button', { onClick: loadLandscape, style: { padding:"7px 16px", borderRadius:"6px", border:"none", background: state === "done" ? "#334155" : "#3b82f6", color:"#fff", fontWeight:600, fontSize:"13px", cursor:"pointer" } },
+            state === "done" ? "↻ Refresh" : "Generate Landscape"
+          ),
+          state === "loading" && React.createElement('span', { style: { fontSize:"13px", color:"#94a3b8", fontStyle:"italic" } }, "Generating…")
+        )
+      ),
+      state === "idle" && React.createElement('div', { style: { padding:"40px", textAlign:"center", color:"#9ca3af", background:"#f9fafb" } },
+        React.createElement('div', { style: { fontSize:"32px", marginBottom:"10px" } }, "🧬"),
+        React.createElement('div', { style: { fontSize:"14px", fontWeight:500, color:"#6b7280" } }, "Click ", React.createElement('strong', null, "Generate Landscape"), " to load the full indication map for ", product, "."),
+        React.createElement('div', { style: { fontSize:"12px", marginTop:"6px", color:"#9ca3af" } }, "Sourced via Sonnet + web search · Cached 30 days per product")
+      ),
+      state === "loading" && React.createElement('div', { style: { padding:"48px", textAlign:"center", background:"#f9fafb" } },
+        React.createElement('div', { style: { fontSize:"14px", color:"#6b7280" } }, "Researching ", product, " indication landscape…"),
+        React.createElement('div', { style: { fontSize:"12px", color:"#9ca3af", marginTop:"4px" } }, "First load ~10–15 seconds · subsequent loads instant from cache")
+      ),
+      state === "error" && React.createElement('div', { style: { padding:"24px 20px", background:"#fff7f7", borderTop:"1px solid #fee2e2" } },
+        React.createElement('span', { style: { color:"#b91c1c", fontWeight:600 } }, "⚠ Error: "),
+        React.createElement('span', { style: { color:"#dc2626", fontSize:"13px" } }, error)
+      ),
+      state === "done" && data && React.createElement('div', { style: { background:"#fff" } },
+        Object.entries(grouped).map(([ta, rows]) => {
+          const c = getTA(ta);
+          return React.createElement('div', { key: ta, style: { borderBottom:"1px solid #f3f4f6" } },
+            React.createElement('div', { style: { padding:"10px 18px", background:c.bg, borderLeft:`4px solid ${c.border}`, display:"flex", alignItems:"center", gap:"10px" } },
+              React.createElement('span', { style: { width:"10px", height:"10px", borderRadius:"50%", background:c.dot, display:"inline-block", flexShrink:0 } }),
+              React.createElement('span', { style: { fontWeight:700, fontSize:"13.5px", color:c.text, textTransform:"uppercase", letterSpacing:"0.06em" } }, ta),
+              React.createElement('span', { style: { fontSize:"12px", color:c.border, fontWeight:500 } }, rows.length, " indication", rows.length !== 1 ? "s" : "")
+            ),
+            React.createElement('div', { style: { overflowX:"auto" } },
+              React.createElement('table', { style: { width:"100%", borderCollapse:"collapse", minWidth:"900px" } },
+                React.createElement('thead', null,
+                  React.createElement('tr', { style: { background:"#f9fafb" } },
+                    headerNames.map(h => React.createElement('th', { key: h, style: TH }, h))
+                  )
+                ),
+                React.createElement('tbody', null,
+                  rows.map((r, i) => React.createElement('tr', { key: i, style: { background: i%2===0 ? "#fff" : "#fafafa" } },
+                    React.createElement('td', { style: { ...TD, width:colWidths[0], fontWeight:500 } }, r.indication||"—"),
+                    React.createElement('td', { style: { ...TD, width:colWidths[1], color:"#4b5563" } }, r.line_of_therapy||"—"),
+                    React.createElement('td', { style: { ...TD, width:colWidths[2], color:"#6b7280", fontSize:"12px" } }, r.trial_name||"—"),
+                    React.createElement('td', { style: { ...TD, width:colWidths[3], color:"#6b7280", fontSize:"12px", fontFamily:"monospace" } }, r.trial_code||"—"),
+                    React.createElement('td', { style: { ...TD, width:colWidths[4], textAlign:"center" } }, React.createElement(StatusBadge, { status: r.regulatory_status })),
+                    React.createElement('td', { style: { ...TD, width:colWidths[5], fontSize:"12px" } }, r.key_combinations||"—"),
+                    React.createElement('td', { style: { ...TD, width:colWidths[6], fontSize:"12px" } }, r.approved_markets||"—"),
+                    React.createElement('td', { style: { ...TD, width:colWidths[7], color:"#6b7280", fontSize:"12px" } }, r.approval_year||"—"),
+                    React.createElement('td', { style: { ...TD, width:colWidths[8], color:"#6b7280", fontSize:"11px", fontStyle:"italic" } }, r.notes||"")
+                  ))
+                )
+              )
+            )
+          );
+        }),
+        data.strategic_view && React.createElement('div', { style: { padding:"20px 18px", background:"#1e293b", borderTop:"2px solid #334155" } },
+          React.createElement('div', { style: { fontSize:"12px", fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"14px" } }, "◆ Strategic View"),
+          React.createElement('div', { style: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"16px" } },
+            [
+              { key:"facts",       label:"✓ Facts",       color:"#22d3ee" },
+              { key:"assumptions", label:"◎ Assumptions", color:"#fbbf24" },
+              { key:"signals",     label:"⚡ Key Signals", color:"#f87171" },
+            ].map(({ key, label, color }) =>
+              React.createElement('div', { key, style: { background:"#0f172a", borderRadius:"8px", padding:"14px" } },
+                React.createElement('div', { style: { fontSize:"11px", fontWeight:700, color, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"10px" } }, label),
+                (data.strategic_view[key] || []).map((item, i) =>
+                  React.createElement('div', { key: i, style: { fontSize:"12px", color:"#e2e8f0", marginBottom:"7px", lineHeight:"1.5", paddingLeft:"10px", borderLeft:`2px solid ${color}` } }, item)
+                )
+              )
+            )
+          ),
+          React.createElement('div', { style: { marginTop:"12px", fontSize:"11px", color:"#475569", textAlign:"right" } },
+            "Generated ", data.generated_at ? new Date(data.generated_at).toLocaleDateString() : "—", " · Model: Sonnet + web search"
+          )
+        )
+      )
+    )
+  );
+};
+
 // ─── Indication Lookup ───
 function IndicationLookup({product,sessionId,currentValue,onSelect,cache,onCache}){
   const [open,    setOpen]    = React.useState(false);
@@ -2979,6 +3135,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
         React.createElement('input',{className:'mi-select ind-input-padded',placeholder:'Type or click \u2728 to fetch',value:indication,onChange:e=>setIndication(e.target.value)}),
         React.createElement(IndicationLookup,{product,sessionId:state.sessionId,currentValue:indication,onSelect:value=>setIndication(value),cache:indicationCache,onCache:setIndicationCache})
       ),
+      product&&state.sessionId&&React.createElement(IndicationLandscapePanel,{product,accessKey:sessionStorage.getItem('maip_access_key')||''}),
       React.createElement('button',{className:'btn btn-primary',style:{width:'100%',marginTop:16,justifyContent:'center'},onClick:runResearch,disabled:state.researchLoading},
         state.researchLoading?React.createElement('span',{className:'spinner'}):null,
         state.researchLoading?' Researching...':'\uD83D\uDD0D Run Research'

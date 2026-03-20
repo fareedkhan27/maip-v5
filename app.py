@@ -968,6 +968,37 @@ Start directly with the first section header. No preamble. No introduction. No c
 
 
 # ─────────────────────────────────────────────
+# INDICATION LANDSCAPE PROMPT
+# ─────────────────────────────────────────────
+
+LANDSCAPE_SYSTEM_PROMPT = (
+    "You are a pharmaceutical regulatory and market access intelligence analyst. "
+    "Research the complete indication landscape for the specified product using web search "
+    "to verify the current approved label and all late-stage pipeline indications. "
+    "Return ONLY a valid JSON object with exactly two top-level keys. "
+    "No markdown, no code fences, no preamble. Start with { and end with }.\n\n"
+
+    'Key "indications": a JSON array. Each element must contain exactly these fields:\n'
+    '{"indication":"...","line_of_therapy":"...","trial_name":"...","trial_code":"...",'
+    '"regulatory_status":"Approved|Pipeline|Accelerated|Withdrawn",'
+    '"key_combinations":"...","therapy_area":"...","approved_markets":"...","approval_year":"...","notes":"..."}\n'
+    "regulatory_status must be exactly one of: Approved, Pipeline, Accelerated, Withdrawn.\n"
+    "therapy_area must group by tumor type using values: Melanoma, NSCLC, SCLC, RCC, "
+    "Colorectal, Gastric/GEJ, Esophageal, Urothelial, HCC, Hodgkin Lymphoma, HNSCC, "
+    "Mesothelioma, Breast, Other.\n"
+    "Include all FDA, EMA and major market approvals PLUS late-stage pipeline "
+    "(Phase 3 and sNDA/sBLA filed).\n\n"
+
+    'Key "strategic_view": {"facts":["..."],"assumptions":["..."],"signals":["..."]}\n'
+    "facts: 3-5 verified strategic facts about portfolio breadth, key approvals, market position.\n"
+    "assumptions: 2-3 market access growth trajectory assumptions (each prefixed [Assumption]).\n"
+    "signals: 3-4 actionable strategic signals for market access planning.\n\n"
+
+    "JSON object only. No other text."
+)
+
+
+# ─────────────────────────────────────────────
 # RETRY UTILITY
 # ─────────────────────────────────────────────
 
@@ -2390,6 +2421,126 @@ async def get_indications(
         content=result_payload,
         headers={"X-Cache": "MISS"}  # FIX: cache-miss header for diagnostics
     )
+
+
+@app.get("/api/indication-landscape", dependencies=[Depends(require_access_key)])
+@limiter.limit("3/hour")
+async def indication_landscape(
+    request: Request,
+    product: str = Query(...),
+):
+    """
+    Returns the complete indication landscape for a product:
+    - indications[] : all approved + pipeline indications grouped by therapy_area
+    - strategic_view : {facts, assumptions, signals} for executive scanning
+    Cache scope : product-scoped (key = landscape|{product})
+    Cache TTL   : 720h (30 days)
+    Model       : Sonnet + web_search (max 4 turns)
+    Budget      : ~5,000 tokens per MISS call
+    """
+    ls_cache_key = hashlib.sha256(
+        f"landscape|{product.strip().lower()}".encode()
+    ).hexdigest()
+
+    # ── Cache check ───────────────────────────────────────────────────
+    try:
+        conn = get_db()
+        cached = conn.execute(
+            "SELECT result_json FROM response_cache WHERE cache_key=? AND expires_at>?",
+            (ls_cache_key, datetime.utcnow().isoformat())
+        ).fetchone()
+        conn.close()
+        if cached:
+            return JSONResponse(
+                content=json.loads(cached["result_json"]),
+                headers={"X-Cache": "HIT"}
+            )
+    except Exception:
+        pass
+
+    if not client:
+        raise HTTPException(
+            status_code=503,
+            detail="AI features unavailable — ANTHROPIC_API_KEY not set."
+        )
+
+    _check_budget(5000)
+
+    try:
+        raw = call_with_tools(
+            system=LANDSCAPE_SYSTEM_PROMPT,
+            user_msg=(
+                f"Research the complete indication landscape for {product}. "
+                f"Use web search to verify the current approved label and all "
+                f"late-stage pipeline indications (Phase 3 and sNDA/sBLA filed). "
+                f"Return the structured JSON object exactly as instructed."
+            ),
+            model=SONNET,
+            max_turns=4
+        )
+
+        # ── Normalise AI text → clean JSON ────────────────────────────
+        clean = raw.strip()
+        if clean.startswith("```"):
+            clean = re.sub(r"^```[a-zA-Z]*\n?", "", clean)
+            clean = re.sub(r"```$", "", clean).strip()
+        obj_match = re.search(r'\{.*\}', clean, re.DOTALL)
+        if not obj_match:
+            raise ValueError("No JSON object found in AI response")
+        parsed = json.loads(obj_match.group())
+
+        # ── Validate structure ─────────────────────────────────────────
+        if "indications" not in parsed or not isinstance(parsed["indications"], list):
+            raise ValueError("Response missing indications array")
+        if "strategic_view" not in parsed or not isinstance(parsed["strategic_view"], dict):
+            parsed["strategic_view"] = {"facts": [], "assumptions": [], "signals": []}
+
+        result_payload = {
+            "success":        True,
+            "product":        product,
+            "indications":    parsed["indications"],
+            "strategic_view": parsed["strategic_view"],
+            "total":          len(parsed["indications"]),
+            "generated_at":   datetime.utcnow().isoformat(),
+        }
+
+        # ── Cache write (720h) ─────────────────────────────────────────
+        try:
+            conn = get_db()
+            conn.execute(
+                "INSERT OR REPLACE INTO response_cache "
+                "(cache_key, endpoint, result_json, created_at, expires_at) "
+                "VALUES (?,?,?,?,?)",
+                (
+                    ls_cache_key, "indication-landscape",
+                    json.dumps(result_payload),
+                    datetime.utcnow().isoformat(),
+                    (datetime.utcnow() + timedelta(hours=720)).isoformat()
+                )
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+        log_audit(
+            "LANDSCAPE",
+            f"Product: {product} | Indications: {len(parsed['indications'])}",
+            request.client.host if request.client else ""
+        )
+        return JSONResponse(
+            content=result_payload,
+            headers={"X-Cache": "MISS"}
+        )
+
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Landscape JSON parse failed: {str(e)}"
+        )
+    except Exception as e:
+        err = map_api_error_to_user_message(e)
+        raise HTTPException(status_code=500, detail=err["user_message"])
 
 
 class CoverageRequest(BaseModel):
