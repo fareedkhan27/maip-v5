@@ -1090,7 +1090,7 @@ def map_api_error_to_user_message(e: Exception) -> dict:
 # MULTI-TURN TOOL USE HANDLER
 # ─────────────────────────────────────────────
 
-def call_with_tools(system: str, user_msg: str, model: str = SONNET, max_turns: int = 3) -> str:
+def call_with_tools(system: str, user_msg: str, model: str = SONNET, max_turns: int = 3, max_tokens: int = 2000) -> str:
     if not client:
         return "AI features unavailable — ANTHROPIC_API_KEY not set."
 
@@ -1103,7 +1103,7 @@ def call_with_tools(system: str, user_msg: str, model: str = SONNET, max_turns: 
             response = call_anthropic_with_retry(
                 client.messages.create,
                 model=model,
-                max_tokens=2000,
+                max_tokens=max_tokens,
                 system=system,
                 messages=messages,
                 tools=tools,
@@ -2482,7 +2482,8 @@ async def indication_landscape(
                 f"Return the structured JSON object exactly as instructed."
             ),
             model=SONNET,
-            max_turns=4
+            max_turns=4,
+            max_tokens=4000
         )
 
         # ── Normalise AI text → clean JSON ────────────────────────────
