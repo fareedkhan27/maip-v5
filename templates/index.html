@@ -2122,6 +2122,9 @@ function QueryModule({state,dispatch,onFeedback,onStatsRefresh}){
           return React.createElement('div',{key:i,className:'msg msg-ai'},
             React.createElement('div',{className:'msg-bubble'},
               React.createElement(ResponseRenderer,{text:msg.text,onSuggestClick:handleSuggest}),
+              React.createElement('div',{style:{marginTop:10,padding:'6px 10px',borderLeft:'2px solid #d1d5db',background:'rgba(107,114,128,0.05)'}},
+                React.createElement('p',{style:{fontSize:'0.72rem',color:'#9ca3af',fontStyle:'italic',margin:0,lineHeight:1.4}},'AI-generated analysis · Figures sourced from uploaded dataset · Regulatory and market access context requires independent verification before executive use.')
+              ),
               msg.stats&&React.createElement('div',{className:'stat-chips'},
                 React.createElement('span',{className:'stat-chip'},`🔍 Total: ${msg.stats.total||0}`),
                 Object.entries(msg.stats.status_breakdown||{}).map(([k,v])=>
@@ -3201,6 +3204,9 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
           card.cached&&React.createElement('span',{className:'intel-badge',style:{background:'var(--bg-input)',color:'var(--text-muted)'}},'Cached')
         ),
         React.createElement('div',{className:'intel-card-body'},card.result_text),
+        React.createElement('div',{style:{margin:'0 16px 12px',padding:'6px 10px',borderLeft:'2px solid #d1d5db',background:'rgba(107,114,128,0.05)'}},
+          React.createElement('p',{style:{fontSize:'0.72rem',color:'#9ca3af',fontStyle:'italic',margin:0,lineHeight:1.4}},'AI-generated analysis · Figures sourced from uploaded dataset · Regulatory and market access context requires independent verification before executive use.')
+        ),
         React.createElement('div',{className:'intel-card-footer'},
           React.createElement('button',{className:'btn btn-sm btn-secondary',onClick:()=>{navigator.clipboard.writeText(card.result_text)}},'📋 Copy'),
           React.createElement('button',{className:'btn btn-sm btn-secondary',onClick:()=>dispatch({type:'REMOVE_RESEARCH',index:i})},'🗑 Remove')
