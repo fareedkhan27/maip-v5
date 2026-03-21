@@ -3023,6 +3023,20 @@ function CoverageOverlay({data,product,country,onClose}){
   );
 }
 
+// ─── Indication requirement map (mirrors backend RESEARCH_INDICATION_REQUIRED) ───
+const RESEARCH_INDICATION_REQUIRED = {
+  indication: false,
+  competitive: true,
+  timeline: true,
+  public_sector: false,
+  patient_population: true,
+  analog: true,
+  irp_risk: false,
+  evidence_gap: true,
+  hospital_channel: false,
+  payer_landscape: false,
+};
+
 // ─── Market Intelligence Module ───
 function getResearchErrorDisplay(errorData){
   if(!errorData)return{message:'An unexpected error occurred.',showRetry:false};
@@ -3037,6 +3051,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
   const [country,setCountry]=useState('');
   const [indication,setIndication]=useState('');
   const [researchError,setResearchError]=useState(null);
+  const [indicationError,setIndicationError]=useState(null);
   const [researchCache,setResearchCache]=useState({});
   const [indicationCache,setIndicationCache]=React.useState({});
   const [coverageData,setCoverageData]=React.useState(null);
@@ -3059,6 +3074,10 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
     {id:'indication',label:'💊 Indication Research'},
   ];
 
+  const indicationRequired=RESEARCH_INDICATION_REQUIRED[subtype]||false;
+  const indicationEmpty=!indication.trim();
+  const researchDisabled=state.researchLoading||(indicationRequired&&indicationEmpty);
+
   const runResearch=async()=>{
     const rKey=[subtype,product||'',country||'',indication||''].join('|').toLowerCase();
     if(researchCache[rKey]){
@@ -3080,6 +3099,12 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
       setResearchCache(prev=>({...prev,[rKey]:card}));
       onStatsRefresh&&onStatsRefresh();
     }catch(e){
+      // Check if this is an INDICATION_REQUIRED validation error
+      if(e.message&&e.message.includes('indication is required')){
+        setIndicationError(e.message);
+        dispatch({type:'SET',payload:{researchLoading:false}});
+        return;
+      }
       // Surface structured error in banner; do not create a raw error card
       setResearchError({user_message:e.message,retry_suggested:e.message!=='Request failed'&&!e.message.includes('limit')});
     }
@@ -3127,7 +3152,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
     React.createElement('div',{className:'mi-sidebar'},
       React.createElement('h3',{style:{marginBottom:16}},'Research Module'),
       React.createElement('label',{className:'mi-label'},'Module'),
-      React.createElement('select',{className:'mi-select',value:subtype,onChange:e=>setSubtype(e.target.value)},
+      React.createElement('select',{className:'mi-select',value:subtype,onChange:e=>{setSubtype(e.target.value);setIndicationError(null);}},
         subtypes.map(s=>React.createElement('option',{key:s.id,value:s.id},s.label))
       ),
       React.createElement('label',{className:'mi-label'},'Product'),
@@ -3142,10 +3167,13 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
       ),
       React.createElement('label',{className:'mi-label'},'Indication'),
       React.createElement('div',{className:'ind-input-wrap'},
-        React.createElement('input',{className:'mi-select ind-input-padded',placeholder:'Type or click \u2728 to fetch',value:indication,onChange:e=>setIndication(e.target.value)}),
-        React.createElement(IndicationLookup,{product,sessionId:state.sessionId,currentValue:indication,onSelect:value=>setIndication(value),cache:indicationCache,onCache:setIndicationCache})
+        React.createElement('input',{className:'mi-select ind-input-padded',placeholder:'Type or click \u2728 to fetch',value:indication,onChange:e=>{setIndication(e.target.value);setIndicationError(null);}}),
+        React.createElement(IndicationLookup,{product,sessionId:state.sessionId,currentValue:indication,onSelect:value=>{setIndication(value);setIndicationError(null);},cache:indicationCache,onCache:setIndicationCache})
       ),
-      React.createElement('button',{className:'btn btn-primary',style:{width:'100%',marginTop:16,justifyContent:'center'},onClick:runResearch,disabled:state.researchLoading},
+      indicationError&&React.createElement('div',{style:{fontSize:'0.8rem',color:'#ef4444',marginTop:4}},indicationError),
+      !indicationError&&indicationEmpty&&indicationRequired&&React.createElement('div',{style:{fontSize:'0.8rem',color:'#f59e0b',marginTop:4}},'\u26A0\uFE0F Indication required for this research module. Please enter or select an indication.'),
+      !indicationError&&indicationEmpty&&!indicationRequired&&React.createElement('div',{style:{fontSize:'0.8rem',color:'#6b7280',marginTop:4,fontStyle:'italic'}},'\u2139\uFE0F Indication optional for this module — research will proceed at product level.'),
+      React.createElement('button',{className:'btn btn-primary',style:{width:'100%',marginTop:16,justifyContent:'center'},onClick:runResearch,disabled:researchDisabled},
         state.researchLoading?React.createElement('span',{className:'spinner'}):null,
         state.researchLoading?' Researching...':'\uD83D\uDD0D Run Research'
       ),
