@@ -6,23 +6,19 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-0A2463?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-1E6091?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Anthropic](https://img.shields.io/badge/Claude-Haiku%20%7C%20Sonnet-00A3E0?style=flat-square)](https://anthropic.com)
+[![Railway](https://img.shields.io/badge/Deployed-Railway-7B2D8B?style=flat-square)](https://lrmaip.com)
 [![License](https://img.shields.io/badge/License-MIT-1A936F?style=flat-square)](LICENSE)
+
+**Live platform:** [lrmaip.com](https://lrmaip.com)
+**Built by:** Fareed Khan · fareedkhan27@gmail.com
 
 ---
 
-## What is MAIP?
+## What Is MAIP?
 
-MAIP is a schema-driven market access intelligence platform. It connects to your reimbursement tracking dataset and lets you query it using natural language — no SQL, no filter menus, no pivot tables.
+MAIP is a schema-driven market access intelligence platform built for LR (Local Representative) markets across CEE, LATAM, and MEA. It connects to your reimbursement tracking dataset and lets you query it using natural language — no SQL, no filter menus, no pivot tables.
 
-Ask things like:
-
-- *"Show Opdivo Planned entries in MEA"*
-- *"Bar chart: reimbursed entries by region"*
-- *"How many countries have Planned status?"*
-- *"What is the typical HTA timeline for Saudi Arabia?"*
-- *"Which product has the most planned records?"*
-
-The platform answers with exact numbers, structured analysis, and visualisations — all derived directly from your data.
+It also delivers AI-powered market intelligence across 10 research modules, covering competitive landscape, HTA pathways, timeline forecasting, IRP risk, payer dynamics, patient population, and more — all grounded in live web search and your uploaded data.
 
 ---
 
@@ -30,39 +26,279 @@ The platform answers with exact numbers, structured analysis, and visualisations
 
 | Feature | Description |
 |---|---|
-| **Natural language queries** | Ask in plain English — abbreviations, typos, and short forms all handled |
-| **Schema auto-detection** | Upload any `.xlsx`, `.xls`, or `.csv` — columns detected automatically |
-| **Exact data accuracy** | Filters run in Python (pandas) — AI only narrates, never estimates |
-| **11 intelligence modules** | Reimbursement tracking, competitive landscape, HTA profiles, patient population, IRP risk, and more |
-| **SVG charts** | Bar, pie, and line charts — no charting library dependencies |
+| **Natural language queries** | Ask in plain English — abbreviations, typos, and short forms handled via fuzzy matching |
+| **Schema auto-detection** | Upload any `.xlsx`, `.xls`, or `.csv` — 10 semantic roles detected automatically |
+| **Exact data accuracy** | Filters run in Python (pandas) — AI only narrates, never estimates from data |
+| **10 research modules** | Competitive landscape, HTA, timeline, IRP risk, payer landscape, patient population, analog intelligence, evidence gap, hospital channel, indication research |
+| **Indication Landscape** | Full therapy-area grouped indication map (Approved + Pipeline) with strategic view — Sonnet + web search, cached 30 days |
+| **Indication Coverage** | Cross-references FDA/EMA approved indications against your dataset per country — shows reimbursement gaps |
+| **Leadership Summary** | Structured executive cards for Competitive (M3), Timeline (M4), HTA (M5), IRP Risk (M8) modules |
+| **Cross-Market Comparison** | Side-by-side comparison of any two markets across the 4 leadership-enabled modules |
+| **Gap Priority Score** | Composite access gap scoring (0–100) across all markets with Critical/Defend/Watch/Monitor tiers |
+| **Chart.js + SVG charts** | Bar/clustered/stacked bar via Chart.js 4.4.0; pie and line via SVG — deterministic type selection |
+| **PDF export** | Leadership briefing PDF export per module (jsPDF 2.5.1) |
+| **Excel export** | Filtered data + summary analytics sheet |
 | **Session isolation** | Each user's data is fully isolated — no cross-contamination |
-| **Demo mode** | Try the platform without uploading a file |
-| **Export** | Download filtered data as Excel with analytics sheets |
+| **Demo mode** | Try the platform without uploading a file — synthetic generic dataset |
+| **Token usage indicator** | Live header chip showing daily token consumption vs budget |
+| **Retry logic** | Exponential backoff (2s/4s/8s) on Anthropic 429 and 529 errors |
 
 ---
 
 ## Architecture
 
 ```
-Browser (React UI)
-      ↕  HTTP — no API keys, no raw data exposed
-FastAPI Server (Python)
+Browser (React 18 UI)
+      ↕  HTTP — access-key gated, no raw data exposed
+FastAPI Server (Python 3.11) — app.py
       ↕  Server-side only
-  ┌─────────────────────────────────────┐
-  │  Anthropic API (key in .env)        │
-  │  pandas filter engine               │
-  │  SQLite session store               │
-  │  Rate limiter (slowapi)             │
-  └─────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────┐
+  │  Anthropic API (Claude Haiku + Sonnet)               │
+  │  pandas filter engine (deterministic)                │
+  │  SQLite session + cache store (maip.db)              │
+  │  Rate limiter (slowapi)                              │
+  │  Daily token budget guard                            │
+  │  Exponential backoff retry (3 attempts max)          │
+  └──────────────────────────────────────────────────────┘
 ```
 
-**Three-stage pipeline — data accuracy guarantee:**
+### Three-Stage Query Pipeline — Data Accuracy Guarantee
 
-1. **Intent Parser** (Claude Haiku) — converts natural language to a structured filter spec
-2. **Filter Engine** (pandas) — executes filters deterministically against your dataset
-3. **Narrator** (Claude Haiku) — writes analytical prose from pre-computed stats
+Every natural language query passes through three stages:
 
-Claude never touches raw data values. Every number in every response comes from pandas.
+```
+Stage 1 — Intent Parser (Haiku)
+  Input:  raw user query + dataset schema + unique values
+  Output: structured filter spec JSON (product, country, status, period, etc.)
+  
+Stage 2 — Filter Engine (pandas)
+  Input:  filter spec + full dataset DataFrame
+  Output: filtered rows + computed stats (deterministic — no AI involvement)
+  
+Stage 3 — Narrator (Haiku)
+  Input:  pre-computed stats (NOT raw data)
+  Output: analytical prose in 5-section format
+  
+Claude never touches raw data values. Every number comes from pandas.
+```
+
+### Research Module Pipeline
+
+```
+/api/research POST
+  Input:  subtype + {product, country, indication}
+  Stage:  call_with_tools() — Sonnet + web_search (max 3 turns)
+  Output: structured markdown intelligence card
+
+/api/indication-landscape GET
+  Input:  product
+  Stage:  Sonnet + web_search (max 4 turns)
+  Output: JSON {indications[], strategic_view{}} grouped by therapy area
+  Cache:  720h (30 days) in response_cache
+```
+
+---
+
+## Intelligence Modules
+
+### Query Module (Module 1)
+
+Natural language interface to your uploaded dataset.
+
+| Capability | Detail |
+|---|---|
+| Query engine | Claude Haiku (intent parsing + narration) |
+| Filter execution | pandas (deterministic) |
+| Chart types | Bar (Chart.js), Pie (SVG), Line (SVG) |
+| Chart type selection | Deterministic client-side logic — no AI token cost |
+| Rate limit | 30 queries/hour |
+| Cache | 24h per session+query hash |
+
+### Research Modules (Modules 2–10)
+
+All 9 research subtypes route through `POST /api/research` using Claude Sonnet + web search (3 turns max). Rate limit: 3 requests/hour.
+
+| # | Module | Subtype Key | Indication Required |
+|---|---|---|---|
+| 2 | Competitive Landscape | `competitive` | ✅ Yes |
+| 3 | Timeline Intelligence | `timeline` | ✅ Yes |
+| 4 | HTA & Public Sector | `public_sector` | ❌ No (country-level) |
+| 5 | Patient Population | `patient_population` | ✅ Yes |
+| 6 | Analog Intelligence | `analog` | ✅ Yes |
+| 7 | IRP Risk Analysis | `irp_risk` | ❌ No (product-level) |
+| 8 | Evidence Gap | `evidence_gap` | ✅ Yes |
+| 9 | Hospital Channel | `hospital_channel` | ❌ No (country/product-level) |
+| 10 | Payer Landscape | `payer_landscape` | ❌ No (country-level) |
+
+An additional subtype `indication` retrieves all indications for a product via the research pipeline. For the structured indication lookup and landscape features, see dedicated routes below.
+
+### Indication Routes (Dedicated)
+
+Three standalone routes handle indication intelligence:
+
+| Route | Purpose | Model | Rate | Cache TTL |
+|---|---|---|---|---|
+| `GET /api/indications` | Short indication list — dropdown population | Haiku + web_search | 10/hr | 720h |
+| `GET /api/indication-landscape` | Full therapy-area grouped landscape with strategic view | Sonnet + web_search | 10/hr | 720h |
+| `POST /api/indication-coverage` | Cross-reference FDA/EMA indications vs dataset per country | Haiku normalisation | 15/hr | 24h |
+
+### Leadership Summary (Modules 3, 4, 5, 8 Only)
+
+Structured executive cards extracted from research module outputs. Supported modules:
+
+| Module ID | Research Subtype | Summary Fields |
+|---|---|---|
+| 3 | Competitive | Competitors, access status, biosimilar threat, our position, access gap |
+| 4 | Timeline | Current milestone, next milestone, estimated timeline, regional benchmark, delay risk |
+| 5 | HTA & Public Sector | HTA body, evidence standard, current status, expected timeline, risk rating |
+| 8 | IRP Risk | Reference basket, price position, cascade exposure, financial risk, risk level |
+
+All summaries include a `leadership_signal` — one action-oriented sentence grounded exclusively in the intelligence output.
+
+**Cross-Market Comparison** is available for the same 4 modules. Country B is analysed using Sonnet training knowledge if no local intelligence has been run; estimates are labelled `[Benchmark]`.
+
+**PDF Export** generates a dark-theme A4 briefing document with all summary fields and the leadership signal.
+
+### Gap Priority Score
+
+Composite scoring engine across all markets in your dataset.
+
+```
+Score (0–100) = Gap % × 0.5 + Indication Breadth × 0.3 + Years in Gap × 0.2
+
+Tiers:
+  Critical  ≥ 70   →  Immediate engagement
+  Defend    ≥ 45   →  Targeted submission required
+  Watch     ≥ 20   →  Monitor trajectory
+  Monitor    < 20  →  Stable
+```
+
+---
+
+## API Reference
+
+All endpoints require the `x-access-key` header except `GET /api/health`.
+
+### Core Routes
+
+| Method | Route | Purpose | Rate |
+|---|---|---|---|
+| `GET` | `/` | Serve React UI | — |
+| `GET` | `/api/health` | Health check | — |
+| `GET` | `/api/stats` | Token usage + query counts | — |
+| `POST` | `/api/upload` | Upload dataset (.xlsx/.xls/.csv) | 10/hr |
+| `GET` | `/api/demo` | Create demo session | — |
+
+### Query & Analysis
+
+| Method | Route | Purpose | Rate |
+|---|---|---|---|
+| `POST` | `/api/query` | Natural language query | 30/hr |
+| `POST` | `/api/kpi` | KPI summary for dashboard | — |
+| `POST` | `/api/gap_analysis` | Simple gap list (legacy) | — |
+| `GET` | `/api/gap-analysis` | Gap Priority Score with tiers | 20/hr |
+| `POST` | `/api/export/excel` | Export filtered data as Excel | — |
+
+### Research & Intelligence
+
+| Method | Route | Purpose | Rate |
+|---|---|---|---|
+| `POST` | `/api/research` | Run research module (subtypes 2–10) | 3/hr |
+| `POST` | `/api/leadership-summary` | Generate executive summary card | 5/hr |
+| `POST` | `/api/compare-markets` | Cross-market comparison | 3/hr |
+| `GET` | `/api/indications` | Indication list for dropdown | 10/hr |
+| `GET` | `/api/indication-landscape` | Full landscape with therapy areas | 10/hr |
+| `POST` | `/api/indication-coverage` | Coverage gap vs dataset | 15/hr |
+
+### Utility
+
+| Method | Route | Purpose | Rate |
+|---|---|---|---|
+| `POST` | `/api/feedback` | Submit issue report | — |
+| `GET` | `/api/feedback` | View feedback log (admin) | — |
+| `POST` | `/api/annotate` | Add row annotation | — |
+| `GET` | `/api/annotations/{session_id}` | Get annotations | — |
+| `GET` | `/api/history/{session_id}` | Query history | — |
+| `GET` | `/api/sessions` | Active sessions list | — |
+| `GET` | `/api/audit` | Audit log (admin) | — |
+
+---
+
+## Cache Architecture
+
+MAIP uses a dual-layer cache — server-side SQLite + frontend React state — to minimise Anthropic API calls.
+
+```
+Request arrives
+      ↓
+Frontend cache hit? → Return instantly (0 tokens)
+      ↓ miss
+Server response_cache hit + not expired? → Return (0 tokens)
+      ↓ miss
+Anthropic API call → Write to server cache + frontend cache
+```
+
+| Endpoint | Server Cache Table | Key | TTL |
+|---|---|---|---|
+| `/api/query` | `response_cache` | `session_id + sha256(query)` | 24h |
+| `/api/research` | `research_cache` | `subtype + sha256(context)` | 24h |
+| `/api/leadership-summary` | `response_cache` | `module+country+product+indication+text[:4000]` | 24h |
+| `/api/compare-markets` | `response_cache` | `module+countryA+countryB+product+indication` | 24h |
+| `/api/indications` | `response_cache` | `product` | 720h |
+| `/api/indication-landscape` | `response_cache` | `product` | 720h |
+| `/api/indication-coverage` | `response_cache` | `product+country+sorted(fdaIndications[:15])` | 24h |
+
+Error responses (429, 529, rate_limit text) are never written to cache. A startup purge removes any poisoned entries on each deploy.
+
+---
+
+## Database
+
+MAIP uses **SQLite** in production (Railway, single-instance deployment). The database file is `maip.db` in the project root.
+
+### Tables
+
+| Table | Domain | Purpose | Persistent |
+|---|---|---|---|
+| `sessions` | Session | Dataset storage (JSON) — 4hr expiry | ❌ |
+| `queries` | Session | Query log + filter specs | ✅ |
+| `research_cache` | Cache | Research module results | ❌ (24h TTL) |
+| `response_cache` | Cache | Leadership, compare, indications, query | ❌ (24h/720h TTL) |
+| `annotations` | Data | User row notes | ✅ |
+| `audit_log` | Observability | All API actions | ✅ |
+| `feedback_log` | Observability | User issue reports | ✅ |
+
+> **Roadmap:** Migration to Railway PostgreSQL is planned (15-table schema designed). This will add persistent indication master registry, team results store, per-call token tracking, and daily cost aggregation.
+
+---
+
+## Dataset Requirements
+
+MAIP works with **any** structured dataset. Upload a `.xlsx`, `.xls`, or `.csv` file and the schema is detected automatically from column headers.
+
+For reimbursement tracking, the platform works best when your dataset includes columns representing:
+
+| Semantic Role | Example Column Names |
+|---|---|
+| `PRODUCT` | Product, Brand, Drug, Molecule |
+| `COUNTRY` | Country, Market, Territory |
+| `STATUS` | Status, Reimbursement Status, Access Status |
+| `PERIOD` | Period, Quarter Period (format: `YYYY-QN`) |
+| `REGION` | Region, Geography, Area |
+| `SECTOR` | Sector, Channel, Payer Setting |
+| `INDICATION` | Indication, Indication Details, Disease |
+| `DATASOURCE` | Data-Source, Source (for dual-domain datasets) |
+
+Column names and values are never hardcoded. The platform adapts to whatever headers and values are in your file.
+
+### Dual-Domain Dataset Model (LR Markets)
+
+MAIP natively supports dual-domain datasets where:
+
+- `Data-Source = "Access Only"` → Reimbursement data (Period format: `YYYY-QN`)
+- `Data-Source = "Launch Only"` → Launch data (Launch-Month format: `MMM-YY`)
+
+`Data-Source` acts as the primary query router. Zero-hallucination is the governing constraint — the intent parser routes queries to the correct domain before filtering.
 
 ---
 
@@ -70,10 +306,10 @@ Claude never touches raw data values. Every number in every response comes from 
 
 ### Prerequisites
 
-- Python 3.11 or higher
+- Python 3.11+
 - An [Anthropic API key](https://console.anthropic.com)
 
-### Install and run
+### Install and Run
 
 ```bash
 # Clone the repository
@@ -90,7 +326,7 @@ pip install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
-# Edit .env and add your Anthropic API key
+# Edit .env: add your ANTHROPIC_API_KEY and ACCESS_KEY
 
 # Start the server
 python app.py
@@ -98,189 +334,111 @@ python app.py
 
 Open **http://localhost:8000** in Chrome or Edge.
 
-### Environment variables
-
-Create a `.env` file in the project root:
-
-```env
-ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
-DAILY_TOKEN_BUDGET=500000
-MAX_FILE_SIZE_MB=20
-SESSION_EXPIRY_HOURS=4
-```
-
----
-
-## Dataset Requirements
-
-MAIP works with **any** structured dataset. Upload a `.xlsx`, `.xls`, or `.csv` file and the schema is detected automatically from your column headers.
-
-For reimbursement tracking, the platform works best when your dataset includes columns representing:
-
-| Concept | Example column names |
-|---|---|
-| Product / Brand | `Product`, `Brand`, `Drug`, `Molecule` |
-| Country / Market | `Country`, `Market`, `Territory` |
-| Status | `Status`, `Reimbursement Status`, `Access Status` |
-| Period | `Period`, `Quarter Period`, `Time Period` |
-| Region | `Region`, `Geography`, `Area` |
-| Sector | `Sector`, `Channel`, `Payer Setting` |
-
-The platform auto-detects these roles and enables corresponding capabilities. Undetected roles can be manually assigned via the upload wizard.
-
-**Column names and values are never hardcoded** — the platform adapts to whatever headers and values are in your file.
-
----
-
-## Intelligence Modules
-
-| # | Module | Description |
-|---|---|---|
-| 1 | **Reimbursement Intelligence** | NL query, filters, charts, paginated table |
-| 2 | **Indication Research** | Live web research → structured indication cards |
-| 3 | **Competitive Landscape** | Competitor profiles per product + country |
-| 4 | **Timeline Intelligence** | Typical months to reimbursement, HTA milestones |
-| 5 | **HTA & Public Sector** | Per-country payer landscape, ICER thresholds |
-| 6 | **Patient Population** | Prevalence, treated patients, epidemiology |
-| 7 | **Analog Intelligence** | Precedent products, outcomes, timelines |
-| 8 | **IRP Risk Analysis** | Reference pricing cascade, launch sequencing |
-| 9 | **Evidence Gap Analysis** | Clinical data gaps vs HTA requirements |
-| 10 | **Hospital & Channel** | Formulary access, KOL landscape |
-| 11 | **Payer Landscape** | Payer mix, coverage criteria, managed entry |
-| 12 | **Executive Dashboard** | KPI tiles, coverage heatmap, gap analysis |
-
-Modules 2–11 use Claude Sonnet with web search for live research. Results are cached per session.
-
----
-
-## API Reference
-
-All endpoints are served by FastAPI at `http://localhost:8000`.
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/` | Serve frontend |
-| `GET` | `/api/health` | Health check |
-| `GET` | `/api/demo` | Create demo session (no file needed) |
-| `GET` | `/api/stats` | Usage statistics and token budget |
-| `POST` | `/api/upload` | Upload dataset file |
-| `POST` | `/api/query` | Natural language query |
-| `POST` | `/api/research` | Market intelligence research |
-| `POST` | `/api/export/excel` | Download filtered data as Excel |
-| `POST` | `/api/kpi` | Compute dashboard KPIs |
-| `POST` | `/api/gap_analysis` | Identify overdue planned records |
-| `POST` | `/api/annotate` | Add note to a data row |
-| `GET` | `/api/annotations/{session_id}` | Get all annotations |
-| `GET` | `/api/history/{session_id}` | Query history |
-| `GET` | `/api/sessions` | List all sessions |
-| `GET` | `/api/audit` | Audit log |
-
-Interactive API docs available at `http://localhost:8000/docs` (FastAPI auto-generated).
-
----
-
-## Deployment
-
-### Railway (Recommended for public demos)
-
-1. Fork this repository
-2. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub
-3. Select your fork
-4. Add environment variables in the Variables tab
-5. Railway generates a public URL automatically
-
-### Azure App Service
+### Environment Variables
 
 ```bash
-az group create --name maip-rg --location uaenorth
-az webapp create --resource-group maip-rg \
-  --plan maip-plan --name maip-app \
-  --runtime "PYTHON:3.11"
-az webapp config appsettings set \
-  --resource-group maip-rg --name maip-app \
-  --settings ANTHROPIC_API_KEY="sk-ant-..."
-git push azure main
+ANTHROPIC_API_KEY=sk-ant-api03-...     # Required — Anthropic API key
+ACCESS_KEY=your-access-key             # Required — gates all /api/* routes
+DAILY_TOKEN_BUDGET=500000              # Optional — daily token cap (default 500k)
+MAX_FILE_SIZE_MB=20                    # Optional — upload size limit (default 20MB)
+SESSION_EXPIRY_HOURS=4                 # Optional — session lifetime (default 4h)
+RESEARCH_CACHE_TTL_HOURS=24            # Optional — cache TTL (default 24h)
+PORT=8000                              # Optional — server port (default 8000)
 ```
 
 ---
 
-## Cost Estimate
+## Models Used
 
-MAIP uses [Claude Haiku](https://anthropic.com/claude/haiku) for query processing (fast, low cost) and Claude Sonnet for market intelligence research.
-
-| Usage Level | Sessions/month | Estimated AI Cost |
+| Route(s) | Model | Rationale |
 |---|---|---|
-| Personal demo | ~50 | ~$0.30 |
-| Small team (10 people) | ~200 | ~$1.20 |
-| Department (50 people) | ~500 | ~$3.00 |
-| Public demo (100+ visitors) | ~1,000 | ~$6.00 |
+| `/api/query` (intent + narrator) | `claude-haiku-4-5-20251001` | High-volume, latency-sensitive, deterministic parsing |
+| `/api/research` | `claude-sonnet-4-6` | Deep web research, multi-turn tool use |
+| `/api/leadership-summary` | `claude-sonnet-4-6` | Executive-grade synthesis — reasoning depth justifies cost |
+| `/api/compare-markets` | `claude-sonnet-4-6` × 2 | Parallel market summaries |
+| `/api/indication-landscape` | `claude-sonnet-4-6` | Full indication research + strategic view |
+| `/api/indications` | `claude-haiku-4-5-20251001` + web_search | Lightweight list fetch |
+| `/api/indication-coverage` | `claude-haiku-4-5-20251001` | Nomenclature normalisation |
 
-Set a monthly spend limit at [console.anthropic.com](https://console.anthropic.com) → Settings → Billing as a safety net.
+Both models can be overridden per-request via the Settings panel in the UI (Haiku ↔ Sonnet).
 
 ---
 
-## Project Structure
+## Accuracy Standards
 
-```
-maip-v5/
-├── app.py                  # FastAPI backend — all AI, data processing, routes
-├── templates/
-│   └── index.html          # React frontend — served by FastAPI
-├── requirements.txt        # Python dependencies
-├── .env                    # API key and config (not committed to Git)
-├── .gitignore
-└── README.md
-```
+All research outputs include an explicit accuracy disclaimer rendered in the UI:
 
-The entire application runs from two files: `app.py` and `templates/index.html`.
+> *AI-generated analysis · Figures sourced from uploaded dataset · Regulatory and market access context requires independent verification before executive use.*
+
+Research module system prompts enforce:
+
+1. Only assert facts directly supported by web search results retrieved in the current session
+2. Any claim not from a current search result is prefixed: `[Unverified — training data only]`
+3. Never fabricate regulatory approval dates, reimbursement percentages, HTA decisions, pricing figures, or market share numbers
+4. Unavailable data points are stated explicitly: *"Not available from current search — recommend primary source verification"*
+5. Confirmed regulatory status is clearly distinguished from pipeline/expected status
 
 ---
 
 ## Security
 
-- **API key is server-side only** — never exposed to the browser
-- **Session isolation** — each user's uploaded data is bound to their session ID
-- **Session expiry** — sessions auto-delete after 4 hours
-- **Rate limiting** — 30 queries/hour and 5 research calls/hour per IP
-- **File validation** — type and size checked before processing
-- **No permanent data storage** — uploaded files exist only in the session
+- All `/api/*` routes require `x-access-key` header — validated against `ACCESS_KEY` env var
+- ANTHROPIC_API_KEY is server-side only — never exposed to the browser
+- Session data (uploaded datasets) lives in SQLite only — never logged, never transmitted
+- `audit_log` stores `{product, country, indication, module}` only — no raw query text
+- CORS restricted to `localhost:8000` and `lrmaip.com`
+- Rate limiting via `slowapi` on all AI-consuming endpoints
+- Exponential backoff retry (2s/4s/8s) on Anthropic 429/529 — never surfaces raw error strings to users
+- Injection defence on all AI prompt boundaries — user-supplied values wrapped in XML tags with explicit instructions to treat as data identifiers only
 
 ---
 
-## Contributing
+## Deployment (Railway)
 
-To suggest improvements or report issues:
+MAIP is deployed on [Railway](https://railway.app) as a single Python service.
 
-1. Open an issue on GitHub describing the problem or suggestion
-2. For bugs: include the exact query you typed and the unexpected result
-3. For features: describe the market access scenario you are trying to solve
-4. Contact: [fareedkhan27@gmail.com](mailto:fareedkhan27@gmail.com)
+```bash
+# Deploy
+git push origin main   # Railway auto-deploys on push to main
 
----
+# Check health
+curl https://lrmaip.com/api/health
+```
 
-## Built With
+Railway reads the `Procfile` for the start command and `.python-version` for the runtime. No additional configuration required.
 
-- [FastAPI](https://fastapi.tiangolo.com) — Python web framework
-- [Anthropic Claude](https://anthropic.com) — AI language model (Haiku + Sonnet)
-- [pandas](https://pandas.pydata.org) — Data processing and filtering
-- [React 18](https://react.dev) — Frontend UI
-- [SheetJS](https://sheetjs.com) — Excel file parsing in browser
-- [slowapi](https://github.com/laurentS/slowapi) — Rate limiting
-- [SQLite](https://sqlite.org) — Session and audit storage
+**Monthly API cost estimate:** $20–30 USD after dual-layer cache (40–50% reduction from caching). Hard cap: $50/day via `DAILY_TOKEN_BUDGET`.
 
 ---
 
-## Author
+## Changelog
 
-**Fareed Khan**
-[fareedkhan27@gmail.com](mailto:fareedkhan27@gmail.com) · [lrmaip.com](https://lrmaip.com)
+### v5.0 (Current)
+- Exponential backoff retry on Anthropic 429/529 (3 attempts, 2s/4s/8s)
+- Chart.js 4.4.0 integration — deterministic chart type selection (clustered bar / stacked bar / horizontal bar / line)
+- Live token usage indicator in header (polling `/api/stats` every 60s)
+- Dual-layer cache (server SQLite + frontend React state) across all 7 AI endpoints
+- Budget guard on all previously unguarded endpoints
+- Indication Landscape module (`/api/indication-landscape`) — full therapy-area grouped map with strategic view
+- Cross-market comparison with `summary_a_cached` passthrough (saves one Sonnet call)
+- Leadership Summary explicit trigger — removed auto-fire to prevent silent token cascade
+- `fdaIndications` memoised in `IndicationCoverage` component
+- Error response cache guard — 429/529 responses never written to cache
+- Startup purge of poisoned cache entries
+
+### v4.x
+- Leadership Summary cards (Competitive, Timeline, HTA, IRP Risk)
+- Indication Coverage gap overlay
+- Gap Priority Score with composite scoring
+- PDF export for leadership briefings
+- Indication Lookup dropdown with FDA/EMA source tagging
+- Recommendation Engine — cross-module signal routing
+- Feedback reporting system
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE)
 
----
-
-*MAIP v5.0 — Market Access Intelligence Platform · Built with Claude*
+Built by [Fareed Khan](mailto:fareedkhan27@gmail.com) · [lrmaip.com](https://lrmaip.com)
