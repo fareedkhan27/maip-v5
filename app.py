@@ -2492,6 +2492,9 @@ async def get_indications(
     try:
         system_prompt = (
             "You are a pharmaceutical regulatory specialist. "
+            "You MUST use web_search to look up the current FDA prescribing "
+            "information (label) for the product before answering. "
+            "Do NOT rely on memory alone — always verify via web search. "
             "Return ONLY a valid JSON array of strings. "
             "No markdown, no code fences, no preamble. "
             "Start with [ and end with ]. "
@@ -2499,7 +2502,7 @@ async def get_indications(
             "short form preferred (e.g. 'NSCLC', 'RCC', "
             "'Melanoma', 'HCC'). Maximum 15 items."
         )
-        user_msg = f"List all currently FDA-approved and EMA-approved indications for {product}."
+        user_msg = f"Search for the current FDA-approved label for {product} and list all approved indications. Also include any additional EMA-approved indications not on the FDA label."
         # Use call_with_tools() to properly handle multi-turn tool_use (web_search)
         # instead of single-turn client.messages.create() which silently discards tool_use blocks
         raw_text = call_with_tools(
@@ -2534,18 +2537,22 @@ async def get_indications(
         ai_indications = []
 
     # ── Layer 3: Merge and deduplicate ───────────────────
+    # FIX: process AI (FDA/EMA) indications FIRST so their authoritative
+    # source tag is preserved; dataset-only indications added after.
+    # Previous order (dataset-first) caused overlapping AI indications
+    # to be deduped away, leaving zero "FDA/EMA"-tagged items.
     seen    = set()
     results = []
-    for ind in dataset_indications:
-        key = ind.lower().strip()
-        if key not in seen:
-            seen.add(key)
-            results.append({"label": ind, "source": "Dataset"})
     for ind in ai_indications:
         key = ind.lower().strip()
         if key not in seen:
             seen.add(key)
             results.append({"label": ind, "source": "FDA/EMA"})
+    for ind in dataset_indications:
+        key = ind.lower().strip()
+        if key not in seen:
+            seen.add(key)
+            results.append({"label": ind, "source": "Dataset"})
     result_payload = {
         "success":      True,
         "product":      product,
