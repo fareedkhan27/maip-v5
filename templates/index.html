@@ -2485,8 +2485,10 @@ function CompareView({
   const [data,    setData]    = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error,   setError]   = React.useState(null);
+  const [compareStarted, setCompareStarted] = React.useState(false);
   const fields = MODULE_FIELD_LABELS[moduleId] || [];
   React.useEffect(() => {
+    if (!compareStarted) return;
     const cmpKey=[moduleId,product||'',indication||'',countryA,countryB].join('|').toLowerCase();
     if(compareCache&&compareCache[cmpKey]){
       setData(compareCache[cmpKey]);setLoading(false);
@@ -2531,7 +2533,7 @@ function CompareView({
     }
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [compareStarted]);
   return React.createElement('div', {
     className: 'cmp-overlay',
     onClick: e => { if (e.target === e.currentTarget) onClose(); }
@@ -2549,7 +2551,9 @@ function CompareView({
         React.createElement('div', { className: 'cmp-market-head cmp-a' }, countryA),
         React.createElement('div', { className: 'cmp-market-head cmp-b' }, countryB + ' \u2746')
       ),
-      loading && React.createElement('div', { className: 'gap-loading' },
+      !compareStarted && React.createElement('div',{style:{textAlign:'center',padding:'32px 0'}},
+        React.createElement('button',{onClick:()=>setCompareStarted(true),style:{padding:'10px 24px',background:'#2563eb',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontSize:'14px',fontWeight:600}},'Generate Comparison')),
+      compareStarted && loading && React.createElement('div', { className: 'gap-loading' },
         `Comparing ${countryA} vs ${countryB}\u2026`),
       error && React.createElement('div', { className: 'gap-error' }, `Error: ${error}`),
       !loading && !error && data &&
@@ -3083,7 +3087,7 @@ function IntelligenceModule({state,dispatch,onStatsRefresh}){
   const cv=state.profile?.countryValues||[];
   const confColors={High:'var(--c-green-500)',Medium:'var(--c-amber-500)',Low:'var(--c-red-500)'};
 
-  const fdaIndications=(indicationCache[product]||[]).filter(i=>i.source==='FDA/EMA').map(i=>i.label);
+  const fdaIndications=React.useMemo(()=>(indicationCache[product]||[]).filter(i=>i.source==='FDA/EMA').map(i=>i.label),[product,indicationCache[product]]);
 
   // CHANGE 2 — Coverage fetch + session cache
   React.useEffect(()=>{

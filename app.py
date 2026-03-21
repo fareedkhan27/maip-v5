@@ -1533,7 +1533,8 @@ async def query(request: Request, body: QueryRequest):
             model_to_use = body.model if body.model else HAIKU
 
             try:
-                intent_response = client.messages.create(
+                intent_response = call_anthropic_with_retry(
+                    client.messages.create,
                     model=model_to_use,
                     max_tokens=600,
                     system=intent_prompt,
@@ -1601,7 +1602,8 @@ async def query(request: Request, body: QueryRequest):
                 else:
                     narrator_input = f"Query: {body.query}\nExpanded: {expanded}\nFilters applied: {json.dumps(filters)}\nStats: {json.dumps(trim_stats_for_narrator(stats), default=str)}"
 
-                narrator_response = client.messages.create(
+                narrator_response = call_anthropic_with_retry(
+                    client.messages.create,
                     model=model_to_use,
                     max_tokens=500,
                     system=NARRATOR_SYSTEM_PROMPT,
