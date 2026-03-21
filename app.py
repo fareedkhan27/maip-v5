@@ -1036,6 +1036,22 @@ CRITICAL ACCURACY STANDARD: This output will be reviewed by pharmaceutical execu
 5. Distinguish clearly between confirmed regulatory status and pipeline/expected status.""",
 }
 
+# Indication requirement by research subtype.
+# true = indication is mandatory; API returns HTTP 400 if missing.
+# false = indication is optional; research proceeds at product/country level.
+RESEARCH_INDICATION_REQUIRED = {
+    "indication": False,        # Retrieves all indications for a product — product-level
+    "competitive": True,        # Competitive landscape is indication-specific
+    "timeline": True,           # Reimbursement timelines are indication-specific
+    "public_sector": False,     # HTA body/process is country-level
+    "patient_population": True, # Epidemiology data is indication-specific
+    "analog": True,             # Analog products are indication-specific
+    "irp_risk": False,          # IRP/reference pricing is product-level
+    "evidence_gap": True,       # Evidence requirements are indication-specific
+    "hospital_channel": False,  # Hospital formulary/procurement is country/product-level
+    "payer_landscape": False,   # Payer mix and coverage criteria are country-level
+}
+
 
 # ─────────────────────────────────────────────
 # INDICATION LANDSCAPE PROMPT
@@ -1765,6 +1781,20 @@ class ResearchRequest(BaseModel):
 async def research(request: Request, body: ResearchRequest):
     start = time.time()
 
+    # VALIDATION GATE: fires before cache check and before Anthropic call
+    if RESEARCH_INDICATION_REQUIRED.get(body.subtype, False):
+        indication_value = (body.context.get("indication") or "").strip()
+        if not indication_value:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error_code": "INDICATION_REQUIRED",
+                    "user_message": f"An indication is required for '{body.subtype}' research. Please select or enter an indication before running this module.",
+                    "retry_suggested": False,
+                    "field": "indication"
+                }
+            )
+
     cache_key = hashlib.sha256(
         (body.subtype + json.dumps(body.context, sort_keys=True)).encode()
     ).hexdigest()
@@ -1797,12 +1827,16 @@ async def research(request: Request, body: ResearchRequest):
     system_prompt = RESEARCH_PROMPTS.get(body.subtype, RESEARCH_PROMPTS.get("competitive", "Provide a detailed analysis."))
 
     context_parts = []
+    indication_value = (body.context.get("indication") or "").strip()
+    if indication_value:
+        indication_block = f"<indication>{indication_value}</indication>"
+    else:
+        indication_block = "<indication>Not specified — conduct product-level analysis only. Do not flag missing indication as an error.</indication>"
     for k, v in body.context.items():
-        if v:
-            if k == "indication":
-                context_parts.append(f"{k}: <indication>{v}</indication>")
-            else:
-                context_parts.append(f"{k}: {v}")
+        if k == "indication":
+            context_parts.append(f"{k}: {indication_block}")
+        elif v:
+            context_parts.append(f"{k}: {v}")
     context_str = "\n".join(context_parts)
     user_msg = (
         f"Research context:\n{context_str}\n\n"
