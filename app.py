@@ -2479,11 +2479,12 @@ async def indication_landscape(
                 f"Research the complete indication landscape for {product}. "
                 f"Use web search to verify the current approved label and all "
                 f"late-stage pipeline indications (Phase 3 and sNDA/sBLA filed). "
+                f"Be concise in all field values — max 8 words per field. "
                 f"Return the structured JSON object exactly as instructed."
             ),
             model=SONNET,
             max_turns=4,
-            max_tokens=4000
+            max_tokens=8000
         )
 
         # ── Normalise AI text → clean JSON ────────────────────────────
@@ -2494,7 +2495,17 @@ async def indication_landscape(
         obj_match = re.search(r'\{.*\}', clean, re.DOTALL)
         if not obj_match:
             raise ValueError("No JSON object found in AI response")
-        parsed = json.loads(obj_match.group())
+        raw_json = obj_match.group()
+        try:
+            parsed = json.loads(raw_json)
+        except json.JSONDecodeError as je:
+            char_pos = je.pos if hasattr(je, 'pos') else '?'
+            total_len = len(raw_json)
+            raise ValueError(
+                f"JSON truncated at char {char_pos}/{total_len} — "
+                f"response exceeded token limit. "
+                f"Increase max_tokens or reduce indication count."
+            )
 
         # ── Validate structure ─────────────────────────────────────────
         if "indications" not in parsed or not isinstance(parsed["indications"], list):
