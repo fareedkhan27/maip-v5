@@ -1358,21 +1358,13 @@ async def demo(request: Request):
     No real product, country, or indication names.
     """
     demo_xlsx = os.path.join(os.path.dirname(__file__), "MAIP_Demo_Dataset.xlsx")
+    if not os.path.exists(demo_xlsx):
+        raise HTTPException(status_code=404, detail="Demo dataset not found on server.")
     df = pd.read_excel(demo_xlsx, sheet_name="Market Access Data")
     # Ensure Year is string for consistent schema detection
     df["Year"] = df["Year"].astype(str)
     sch = detect_schema(df)
-
-    profile = {
-        "totalRows":    len(df),
-        "columns":      [c["name"] for c in sch["columns"]],
-        "roles":        sch["roles"],
-        "uniqueValues": {
-            col: sorted(df[col].dropna().unique().tolist())
-            for col in df.columns
-            if df[col].nunique() < 200
-        },
-    }
+    profile = build_profile(df, sch)
 
     expires_at = (
         datetime.utcnow() + timedelta(hours=1)
