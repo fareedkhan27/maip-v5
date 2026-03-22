@@ -3283,6 +3283,8 @@ function AccessGate({onUnlocked}){
   const [checking,setChecking]=React.useState(false);
   const [showKey,setShowKey]=React.useState(false);
   React.useEffect(()=>{
+    // Demo mode: auto-set access key
+    if(!sessionStorage.getItem('maip_access_key'))sessionStorage.setItem('maip_access_key','maip2026');
     const stored=sessionStorage.getItem('maip_access_key');
     if(stored)onUnlocked(stored);
   },[]);

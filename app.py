@@ -23,7 +23,7 @@ import hashlib, re, difflib, time, traceback
 
 load_dotenv()
 
-ACCESS_KEY = os.getenv("ACCESS_KEY")
+ACCESS_KEY = os.getenv("ACCESS_KEY", "maip2026")
 if not ACCESS_KEY:
     import sys
     print("FATAL: ACCESS_KEY environment variable is not set. Server will not start.")
@@ -1357,56 +1357,10 @@ async def demo(request: Request):
     Creates a temporary 1-hour demo session with synthetic generic data.
     No real product, country, or indication names.
     """
-    import random
-    random.seed(42)
-
-    DEMO_PRODUCTS  = [
-        "Product Alpha", "Product Beta", "Product Gamma",
-        "Combination X+Y", "Treatment Z"
-    ]
-    DEMO_COUNTRIES = [
-        "Country A", "Country B", "Country C",
-        "Country D", "Country E", "Country F"
-    ]
-    DEMO_REGIONS   = ["Region North", "Region South", "Region West"]
-    DEMO_SECTORS   = ["Public", "Private"]
-
-    country_region = {
-        "Country A": "Region North", "Country B": "Region North",
-        "Country C": "Region South", "Country D": "Region South",
-        "Country E": "Region West",  "Country F": "Region West",
-    }
-    private_eligible = {"Country A", "Country C", "Country E"}
-
-    rows = []
-    for country in DEMO_COUNTRIES:
-        region   = country_region[country]
-        sectors  = (["Public", "Private"]
-                    if country in private_eligible
-                    else ["Public"])
-        products = random.sample(DEMO_PRODUCTS, random.randint(2, 4))
-        for product in products:
-            for sector in sectors:
-                for year in range(2023, 2027):
-                    for q in ["Q1", "Q2", "Q3", "Q4"]:
-                        status = (
-                            "Active"
-                            if year < 2026 or
-                               (year == 2026 and q == "Q1")
-                            else "Pending"
-                        )
-                        rows.append({
-                            "Country": country,
-                            "Product": product,
-                            "Region":  region,
-                            "Sector":  sector,
-                            "Year":    str(year),
-                            "Quarter": q,
-                            "Status":  status,
-                            "Period":  f"{year}-{q}",
-                        })
-
-    df  = pd.DataFrame(rows)
+    demo_xlsx = os.path.join(os.path.dirname(__file__), "MAIP_Demo_Dataset.xlsx")
+    df = pd.read_excel(demo_xlsx, sheet_name="Market Access Data")
+    # Ensure Year is string for consistent schema detection
+    df["Year"] = df["Year"].astype(str)
     sch = detect_schema(df)
 
     profile = {
