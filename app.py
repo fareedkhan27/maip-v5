@@ -23,7 +23,7 @@ import hashlib, re, difflib, time, traceback
 
 load_dotenv()
 
-ACCESS_KEY = os.getenv("ACCESS_KEY", "maip2026")
+ACCESS_KEY = os.getenv("ACCESS_KEY")
 if not ACCESS_KEY:
     import sys
     print("FATAL: ACCESS_KEY environment variable is not set. Server will not start.")
